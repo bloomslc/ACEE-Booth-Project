@@ -1,0 +1,96 @@
+import base64
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+from uuid import uuid4
+
+
+class CameraCaptureError(RuntimeError):
+	"""Raised when the connected camera cannot capture an image."""
+
+
+def _bypass_image() -> str | None:
+	if os.getenv("CAMERA_BYPASS", "false").lower() not in {"1", "true", "yes"}:
+		return None
+
+	image_path = Path(os.getenv("CAMERA_BYPASS_IMAGE", "frontend/public/image.jpg"))
+	try:
+		encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+	except OSError as error:
+		raise CameraCaptureError(f"The bypass image could not be read: {image_path}") from error
+
+	return f"data:image/jpeg;base64,{encoded}"
+
+
+def capture_preview() -> str:
+	"""Capture a temporary preview frame without adding it to photo storage."""
+	bypass_image = _bypass_image()
+	if bypass_image:
+		return bypass_image
+
+	preview_path = Path(tempfile.gettempdir()) / f"portrait-booth-preview-{uuid4().hex}.jpg"
+	try:
+		result = subprocess.run(
+			[
+				"gphoto2",
+				"--capture-preview",
+				"--filename",
+				str(preview_path),
+				"--force-overwrite",
+			],
+			capture_output=True,
+			text=True,
+			timeout=15,
+		)
+	except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+		raise CameraCaptureError("gphoto2 could not read the camera preview") from error
+
+	try:
+		if result.returncode != 0 or not preview_path.is_file():
+			raise CameraCaptureError("The camera preview is unavailable")
+		encoded = base64.b64encode(preview_path.read_bytes()).decode("ascii")
+	except OSError as error:
+		raise CameraCaptureError("The camera preview could not be read") from error
+	finally:
+		preview_path.unlink(missing_ok=True)
+
+	return f"data:image/jpeg;base64,{encoded}"
+
+
+def capture_photo() -> str:
+	"""Capture a JPEG with gphoto2 and return it as a browser-ready data URL."""
+	bypass_image = _bypass_image()
+	if bypass_image:
+		return bypass_image
+
+	output_dir = Path(os.getenv("PHOTO_STORAGE_DIR", "data/photos"))
+	output_dir.mkdir(parents=True, exist_ok=True)
+	output_path = output_dir / f"{uuid4().hex}.jpg"
+
+	try:
+		result = subprocess.run(
+			[
+				"gphoto2",
+				"--capture-image-and-download",
+				"--filename",
+				str(output_path),
+				"--force-overwrite",
+			],
+			capture_output=True,
+			text=True,
+			timeout=60,
+		)
+	except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+		raise CameraCaptureError("gphoto2 could not capture a photo") from error
+
+	if result.returncode != 0 or not output_path.is_file():
+		output_path.unlink(missing_ok=True)
+		raise CameraCaptureError("The camera did not return a photo")
+
+	try:
+		encoded = base64.b64encode(output_path.read_bytes()).decode("ascii")
+	except OSError as error:
+		raise CameraCaptureError("The captured photo could not be read") from error
+
+	return f"data:image/jpeg;base64,{encoded}"

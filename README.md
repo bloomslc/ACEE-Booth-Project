@@ -35,3 +35,54 @@ Resend API key stays on the backend and is never exposed to the browser.
 
 The email endpoint is `POST /api/v1/deliveries/email`. It accepts `name`,
 `email`, and an optional base64 image data URL as `image_data_url`.
+
+## Camera capture
+
+The capture screen calls `POST /api/v1/capture`. On the Raspberry Pi, install
+`gphoto2`, connect the Sony camera in PC Remote mode, and set `PHOTO_STORAGE_DIR`
+to the local directory where captured JPEGs should be retained. The endpoint
+returns the locally saved photo to the browser for review; approved photos are
+then sent through Resend.
+
+## MySQL persistence
+
+For the easiest desktop setup, install Docker Desktop, copy the MySQL values
+from `backend/.env.example`, and start the database from the repository root:
+
+```bash
+docker compose up -d mysql
+```
+
+The database is available at `127.0.0.1:3306` and persists in the
+`mysql_data` Docker volume. The API creates its tables automatically on startup.
+
+### Raspberry Pi
+
+Use Raspberry Pi OS 64-bit and install Docker Engine and the Compose plugin.
+From the project directory on the Pi, start the database with:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d mysql
+```
+
+This stores MySQL files in `data/mysql`, so they remain on the Pi even if the
+container is recreated. Keep `MYSQL_HOST=127.0.0.1` in the Pi's
+`backend/.env` because the FastAPI process connects through the published local
+port. Back up `data/mysql` or use `mysqldump` before changing storage devices.
+
+For a manually installed MySQL server, create the database and user instead:
+
+```sql
+CREATE DATABASE portrait_booth CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'portrait_booth'@'localhost' IDENTIFIED BY 'change-this-password';
+GRANT ALL PRIVILEGES ON portrait_booth.* TO 'portrait_booth'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+When `MYSQL_HOST` is set, the API creates the `sessions`, `photos`, and
+`deliveries` tables on startup. Captures and successful Resend deliveries are
+then linked by `session_id`. Leave `MYSQL_HOST` empty to run without MySQL.
+
+For local development without a connected camera, set `CAMERA_BYPASS=true` and
+optionally point `CAMERA_BYPASS_IMAGE` at a JPEG. This bypass applies to both
+the live preview and capture endpoints; leave it set to `false` for the event.

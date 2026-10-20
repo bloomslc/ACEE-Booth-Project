@@ -17,12 +17,14 @@ export default function PhotoBooth() {
     const [step, setStep] = useState<Step>('home')
     const [guest, setGuest] = useState<GuestInfo>(emptyGuest)
     const [photo, setPhoto] = useState<string | null>(null)
+    const [sessionId, setSessionId] = useState<string | null>(null)
     const [deliveryError, setDeliveryError] = useState<string | null>(null)
     const [isSending, setIsSending] = useState(false)
 
     const startNewSession = useCallback(() => {
         setGuest(emptyGuest)
         setPhoto(null)
+        setSessionId(null)
         setDeliveryError(null)
         setIsSending(false)
         setStep('home')
@@ -42,8 +44,9 @@ export default function PhotoBooth() {
             {step === 'camera' && (
                 <CameraCapture
                     onCancel={startNewSession}
-                    onCapture={(dataUrl) => {
+                    onCapture={(dataUrl, capturedSessionId) => {
                         setPhoto(dataUrl)
+                        setSessionId(capturedSessionId)
                         setStep('review')
                     }}
                 />
@@ -67,7 +70,7 @@ export default function PhotoBooth() {
                         setGuest(guestInfo)
                         setDeliveryError(null)
                         setIsSending(true)
-                        void sendPhotoByEmail(guestInfo, photo)
+                        void sendPhotoByEmail(guestInfo, photo, sessionId)
                             .then(() => setStep('done'))
                             .catch((error: unknown) => {
                                 setDeliveryError(

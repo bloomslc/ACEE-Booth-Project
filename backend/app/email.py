@@ -1,4 +1,5 @@
 import base64
+import binascii
 import os
 from dataclasses import dataclass
 
@@ -61,5 +62,5 @@ def _data_url_to_base64(data_url: str) -> str:
 			raise ValueError
 		base64.b64decode(encoded, validate=True)
 		return encoded
-	except (ValueError, base64.binascii.Error) as error:
+	except (ValueError, binascii.Error) as error:
 		raise EmailDeliveryError("The photo must be a base64 image data URL") from error
