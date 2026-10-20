@@ -1,16 +1,36 @@
-import QRCode from "react-qr-code";
-import type { ComponentType } from "react";
+import { ReactQRCode } from "@lglab/react-qr-code";
 
 interface QrcodeProps {
     value: string;
 }
 
 export default function Qrcode( { value }: QrcodeProps ) {
-    const QRCodeComponent = QRCode as unknown as ComponentType<QrcodeProps>;
 
     return (
         <div>
-            <QRCodeComponent value={value} />
+            <ReactQRCode
+                finderPatternInnerSettings={{
+                    style: 'rounded-lg',
+                    color: '#1A3666',
+                }}
+                finderPatternOuterSettings={{
+                    style: 'leaf',
+                    color: '#1A3666',
+                }}
+                imageSettings={{
+                    src: '/bloom.svg',
+                    width: 35,
+                    height: 35,
+                    excavate: true,
+                    opacity: 1,
+                }}
+                dataModulesSettings={{
+                    style: 'square-sm',
+                    color: '#1A3666',
+                }}
+                size={256}
+                value={value}
+            />
         </div>
     );
 }
