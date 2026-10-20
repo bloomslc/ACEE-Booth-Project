@@ -13,6 +13,7 @@ node_modules/
 bun.lock
 
 .env*
+!.env.example
 node_modules
 .env
 tina/__generated__
