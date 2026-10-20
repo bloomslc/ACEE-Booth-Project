@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "@lglab/react-qr-code": "^1.8.1",
-    "lucide-react": "^1.58.0"
-  }
-}

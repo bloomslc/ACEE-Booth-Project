@@ -8,11 +8,13 @@ type GuestFormProps = {
   onSubmit: (info: GuestInfo) => void
   onCancel?: () => void
   afterPhoto?: boolean
+    isSending?: boolean
+    error?: string | null
 }
 
 
 
-export default function GuestForm({ onSubmit, onCancel }: GuestFormProps) {
+export default function GuestForm({ onSubmit, onCancel, isSending = false, error }: GuestFormProps) {
     const [name, setName] = useState('')
     const [email, setEmail] = useState('')
 
@@ -49,11 +51,13 @@ export default function GuestForm({ onSubmit, onCancel }: GuestFormProps) {
                             onChange={(e) => setEmail(e.target.value)}
                             value={email}
                             id="email"
+                            required
                             type="email"
                             placeholder="Email"
                             className="rounded-md border px-4 py-2 w-full"
                         />
                         <span className="text-sm text-gray-500">By submitting this form, you agree to our Terms and Conditions.</span>
+                        {error && <span className="text-sm text-red-600">{error}</span>}
                     </form>
                 </div>
             </BoothStructureContent>
@@ -61,8 +65,8 @@ export default function GuestForm({ onSubmit, onCancel }: GuestFormProps) {
                 <Button onClick={onCancel} secondary square>
                     <X size={30} color="black"/>
                 </Button>
-                <Button type="submit" form="guest-form">
-                    Submit
+                <Button type="submit" form="guest-form" disabled={isSending}>
+                    {isSending ? 'Sending...' : 'Send Photo'}
                 </Button>
             </BoothStructureAction>
         </BoothStructure>

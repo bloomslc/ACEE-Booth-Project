@@ -1,12 +1,13 @@
 "use client";
 
-import { boothConfig, type GuestInfo } from '@/libs/booth-config';
+import type { GuestInfo } from '@/libs/booth-config';
 import { useCallback, useState } from "react";
 import BoothHome from "./step/booth-home";
 import CameraCapture from "./step/camera-capture";
 import PhotoReview from './step/photo-review';
 import GuestForm from './step/guest-form';
 import ThankYou from './thank-you';
+import { sendPhotoByEmail } from '@/libs/api';
 
 type Step = 'home' | 'camera' | 'review' | 'guest' | 'done'
 
@@ -16,13 +17,15 @@ export default function PhotoBooth() {
     const [step, setStep] = useState<Step>('home')
     const [guest, setGuest] = useState<GuestInfo>(emptyGuest)
     const [photo, setPhoto] = useState<string | null>(null)
-    const [sessionKey, setSessionKey] = useState<string | null>(null)
+    const [deliveryError, setDeliveryError] = useState<string | null>(null)
+    const [isSending, setIsSending] = useState(false)
 
     const startNewSession = useCallback(() => {
         setGuest(emptyGuest)
         setPhoto(null)
+        setDeliveryError(null)
+        setIsSending(false)
         setStep('home')
-        setSessionKey(crypto.randomUUID())
     }, [])
 
     return (
@@ -62,9 +65,20 @@ export default function PhotoBooth() {
                 <GuestForm 
                     onSubmit={(guestInfo) => {
                         setGuest(guestInfo)
-                        setStep('done')
+                        setDeliveryError(null)
+                        setIsSending(true)
+                        void sendPhotoByEmail(guestInfo, photo)
+                            .then(() => setStep('done'))
+                            .catch((error: unknown) => {
+                                setDeliveryError(
+                                    error instanceof Error ? error.message : 'The photo could not be sent',
+                                )
+                            })
+                            .finally(() => setIsSending(false))
                     }}
                     onCancel={startNewSession}
+                    isSending={isSending}
+                    error={deliveryError}
                 />
             )}
 
@@ -72,7 +86,6 @@ export default function PhotoBooth() {
                 <ThankYou
                     onBackHome={startNewSession}
                     guest={guest}
-                    sessionKey={sessionKey}
                 />
             )}
         </main>
