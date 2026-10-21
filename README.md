@@ -21,13 +21,12 @@ results when it is enabled.
 backend/
 	app/main.py       FastAPI routes and application startup
 	app/camera.py     gphoto2 capture and preview adapter
-	app/database.py   Optional MySQL persistence
+	app/database.py   Optional Neon PostgreSQL persistence
 	app/email.py      Resend email delivery
 frontend/
 	app/              Next.js application shell
 	components/booth/ Booth workflow screens
 	libs/api.ts       Browser-to-backend API client
-docker-compose.yml  Local MySQL service
 ```
 
 ## Requirements
@@ -36,7 +35,7 @@ For development:
 
 - Python 3 with virtual-environment support
 - Node.js and npm, or Bun
-- Docker Desktop or Docker Engine plus Compose, if using MySQL
+- A Neon PostgreSQL project, if persistence is enabled
 
 For physical booth operation:
 
@@ -109,7 +108,7 @@ With `DEV_BYPASS=true`:
 - Preview and capture use the configured local JPEG instead of `gphoto2`.
 - Bypass captures are not written to `data/images`; their `local_path` is null.
 - Resend is not called; delivery returns `status: "skipped"`.
-- MySQL startup, reads, and writes are disabled even if `MYSQL_HOST` is set.
+- Neon startup, reads, and writes are disabled even if `NEON_DATABASE_URL` is set.
 
 Set `DEV_BYPASS=false` for physical camera and email testing.
 
@@ -120,7 +119,7 @@ Physical preview uses `gphoto2 --capture-preview`. Capture uses
 `gphoto2 --capture-image-and-download`, saves a UUID-named JPEG under
 `PHOTO_STORAGE_DIR` (default: `data/images`), and returns the image to the
 browser for review. The saved local path is returned as `local_path` and is
-stored in MySQL with the capture session.
+stored in Neon with the capture session.
 
 The camera adapter times out preview after 15 seconds and capture after 60
 seconds. A missing camera, failed command, timeout, or missing output file is
@@ -239,12 +238,16 @@ This is an end-to-end booth prototype, not yet a production queueing system.
 - Capture creates a session per capture; a separate multi-capture session API is
 	not implemented.
 - Upload retry workers and offline delivery queues are not implemented.
-- The email request still carries the image as a base64 data URL for delivery;
-	MySQL stores only the local image path.
+- Template email delivery depends on a publicly readable bucket URL; the
+	attachment-based fallback is used only when no Resend template is configured.
+- Neon connectivity is checked at API startup, so an unavailable Neon project
+	will prevent the API from starting when `NEON_DATABASE_URL` is configured.
+- Captured files remain on local disk indefinitely; there is no retention or
+	cleanup job yet.
 - Preview polling serializes camera commands through separate `gphoto2` calls;
 	benchmark this on the exact Pi and camera hardware.
-- Automatic retention cleanup, operator authentication, and systemd service
-	files still need to be added before a public event.
+- Operator authentication, upload retry handling, and systemd service files
+	still need to be added before a public event.
 
 ## License
 
