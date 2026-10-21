@@ -58,7 +58,7 @@ def startup() -> None:
 
 @app.get("/api/v1/health")
 def health() -> dict[str, str]:
-	return {"status": "ok", "email_provider": "resend", "database": "mysql" if is_configured() else "disabled"}
+	return {"status": "ok", "email_provider": "resend", "database": "neon" if is_configured() else "disabled"}
 
 
 @app.post("/api/v1/capture", response_model=CaptureResponse)

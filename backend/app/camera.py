@@ -26,7 +26,7 @@ def _project_path(environment_name: str, default: str) -> Path:
 
 
 def is_dev_bypass() -> bool:
-	return os.getenv("DEV_BYPASS", os.getenv("CAMERA_BYPASS", "false")).lower() in {
+	return os.getenv("DEV_BYPASS", "false").lower() in {
 		"1",
 		"true",
 		"yes",
@@ -37,7 +37,7 @@ def _bypass_image_bytes() -> bytes | None:
 	if not is_dev_bypass():
 		return None
 
-	image_path = _project_path("CAMERA_BYPASS_IMAGE", "frontend/public/image.jpg")
+	image_path = _project_path("DEV_BYPASS_IMAGE", "frontend/public/image.jpg")
 	try:
 		return image_path.read_bytes()
 	except OSError as error:

@@ -11,9 +11,9 @@ operator uses the Next.js web interface on an iPad or computer to preview the
 camera, capture and review a photo, collect guest details, and send the approved
 image by email through Resend.
 
-The backend keeps Resend credentials and camera access off the browser. MySQL
-is optional and records capture sessions, photos, and delivery results when it
-is enabled.
+The backend keeps Resend credentials and camera access off the browser. Neon
+PostgreSQL is optional and records capture sessions, photos, and delivery
+results when it is enabled.
 
 ## Project structure
 
@@ -101,7 +101,7 @@ Set this in `backend/.env`:
 
 ```env
 DEV_BYPASS=true
-CAMERA_BYPASS_IMAGE=frontend/public/image.jpg
+DEV_BYPASS_IMAGE=frontend/public/image.jpg
 ```
 
 With `DEV_BYPASS=true`:
@@ -111,9 +111,7 @@ With `DEV_BYPASS=true`:
 - Resend is not called; delivery returns `status: "skipped"`.
 - MySQL startup, reads, and writes are disabled even if `MYSQL_HOST` is set.
 
-Set `DEV_BYPASS=false` for physical camera and email testing. The legacy
-`CAMERA_BYPASS` variable is still accepted as a fallback, but new setups
-should use `DEV_BYPASS`.
+Set `DEV_BYPASS=false` for physical camera and email testing.
 
 ## Camera operation
 
@@ -163,66 +161,30 @@ local path. The bucket must allow public reads because this configuration is
 intended to provide a public image URL. Keep the access keys only in the
 backend environment; never add them to `NEXT_PUBLIC_*` variables.
 
-## MySQL persistence
+## Neon persistence
 
-Start the local MySQL service:
+Create a Neon PostgreSQL project and put its pooled or direct connection string
+in `backend/.env`:
 
-```bash
-docker compose up -d mysql
+```env
+NEON_DATABASE_URL=postgresql://user:password@ep-example.us-east-2.aws.neon.tech/booth?sslmode=require
 ```
 
-The service uses the ARM64-compatible `mysql:8.4` image, publishes
-`127.0.0.1:3306`, and stores data in the persistent `mysql_data` Docker volume.
 The API creates these tables on startup:
 
 - `sessions`
 - `photos`
 - `deliveries`
 
-Configure the backend with:
-
-```env
-MYSQL_HOST=127.0.0.1
-MYSQL_PORT=3306
-MYSQL_USER=portrait_booth
-MYSQL_PASSWORD=portrait-booth-local
-MYSQL_DATABASE=portrait_booth
-```
-
-The Compose defaults match these values. Leave `MYSQL_HOST` empty to disable
-MySQL, or enable `DEV_BYPASS` to disable it automatically during development.
-
-Useful database commands:
-
-```bash
-docker compose exec mysql mysql -u portrait_booth -p portrait_booth
-docker compose ps
-docker compose logs mysql
-```
-
-Stop the service without deleting data:
-
-```bash
-docker compose stop mysql
-```
-
-Do not run `docker compose down -v` unless you intend to delete the database
-volume.
+Leave `NEON_DATABASE_URL` empty to disable Neon, or enable `DEV_BYPASS` to
+disable database access automatically during development. The connection must
+use SSL, as shown by `sslmode=require`.
 
 ## Raspberry Pi deployment
 
-Use Raspberry Pi OS 64-bit and install Docker Engine with the Compose plugin.
-The official MySQL image is multi-architecture, so the same Compose command
-works on the Pi:
-
-```bash
-docker compose up -d mysql
-```
-
-Keep `MYSQL_HOST=127.0.0.1` because the FastAPI process runs on the Pi host and
-connects through the published local port. Install the backend dependencies in
-the Pi virtual environment, install `gphoto2`, and start the API from the
-repository root:
+Use Raspberry Pi OS 64-bit, install `gphoto2`, and give the Pi outbound HTTPS
+access to Neon. Install the backend dependencies in the Pi virtual environment
+and start the API from the repository root:
 
 ```bash
 sudo apt update
