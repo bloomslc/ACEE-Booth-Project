@@ -5,7 +5,7 @@ import { capturePhoto, previewPhoto } from "@/libs/api";
 import { useEffect, useRef, useState } from "react";
 
 interface CameraCaptureProps {
-    onCapture: (dataUrl: string, sessionId: string) => void;
+    onCapture: (dataUrl: string, sessionId: string, remoteUrl: string | null) => void;
     onCancel: () => void;
 }
 
@@ -47,7 +47,7 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
         setError(null)
         try {
             const capturedPhoto = await capturePhoto()
-            onCapture(capturedPhoto.imageDataUrl, capturedPhoto.sessionId)
+            onCapture(capturedPhoto.imageDataUrl, capturedPhoto.sessionId, capturedPhoto.remoteUrl)
         } catch (captureError) {
             setError(captureError instanceof Error ? captureError.message : 'The photo could not be captured')
         } finally {

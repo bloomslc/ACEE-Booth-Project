@@ -4,86 +4,289 @@ Copyright (C) 2026 Bloom Communication
 License: GNU General Public License, version 3 or (at your option) any later version
 (SPDX-License-Identifier: GPL-3.0-or-later)
 
-The ACEE Booth Project is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by the
-Free Software Foundation, either version 3 of the License, or (at your option)
-any later version.
+## ACEE Portrait Booth
 
-The project is distributed in the hope that it will be useful, but WITHOUT
-ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+An operator-controlled portrait booth for a Raspberry Pi and Sony camera. The
+operator uses the Next.js web interface on an iPad or computer to preview the
+camera, capture and review a photo, collect guest details, and send the approved
+image by email through Resend.
 
-A copy of the GNU General Public License is included in the file named LICENSE.
-You can also read it at:
-https://www.gnu.org/licenses/gpl-3.0.html
+The backend keeps Resend credentials and camera access off the browser. MySQL
+is optional and records capture sessions, photos, and delivery results when it
+is enabled.
 
-This project-specific notice identifies the copyright holder and license for
-ACEE Booth Project.
+## Project structure
 
-## Email delivery
+```text
+backend/
+	app/main.py       FastAPI routes and application startup
+	app/camera.py     gphoto2 capture and preview adapter
+	app/database.py   Optional MySQL persistence
+	app/email.py      Resend email delivery
+frontend/
+	app/              Next.js application shell
+	components/booth/ Booth workflow screens
+	libs/api.ts       Browser-to-backend API client
+docker-compose.yml  Local MySQL service
+```
 
-The booth sends approved photos through the FastAPI backend and Resend. The
-Resend API key stays on the backend and is never exposed to the browser.
+## Requirements
 
-1. Copy `backend/.env.example` to `backend/.env` and set `RESEND_API_KEY` and
-	`RESEND_FROM_EMAIL` using a verified Resend domain.
-2. Install dependencies with `python -m pip install -r backend/requirements.txt`.
-3. Start the API from the repository root with
-	`uvicorn app.main:app --reload --port 8080 --app-dir backend`.
-4. Set `NEXT_PUBLIC_API_URL=http://localhost:8080` for the frontend when the
-	API is not served from the same origin.
+For development:
 
-The email endpoint is `POST /api/v1/deliveries/email`. It accepts `name`,
-`email`, and an optional base64 image data URL as `image_data_url`.
+- Python 3 with virtual-environment support
+- Node.js and npm, or Bun
+- Docker Desktop or Docker Engine plus Compose, if using MySQL
 
-## Camera capture
+For physical booth operation:
 
-The capture screen calls `POST /api/v1/capture`. On the Raspberry Pi, install
-`gphoto2`, connect the Sony camera in PC Remote mode, and set `PHOTO_STORAGE_DIR`
-to the local directory where captured JPEGs should be retained. The endpoint
-returns the locally saved photo to the browser for review; approved photos are
-then sent through Resend.
+- Raspberry Pi OS 64-bit
+- Sony camera configured for USB PC Remote mode
+- `gphoto2` and libgphoto2 installed on the Pi
+- A verified Resend sender domain
+
+## Development setup
+
+From the repository root:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r backend/requirements.txt
+cp backend/.env.example backend/.env
+```
+
+Set the Resend values in `backend/.env` for real delivery. For development
+without a camera, use the bypass configuration described below.
+
+For a Resend template, copy [backend/email-template.html](backend/email-template.html)
+into a Resend template and set `RESEND_TEMPLATE_ID`. The template receives the
+guest name as `{{GUEST_NAME}}`, the public bucket image URL through
+`{{PHOTO_IMAGE}}`, and the capture ID through `{{SESSION_ID}}`. Use the image
+variable in the template as an image source, for example
+`<img src="{{PHOTO_IMAGE}}">`. In template mode the image is referenced from
+the bucket URL instead of being attached to the email.
+Set `RESEND_TEMPLATE_IMAGE_VARIABLE` if the template uses a different image
+variable name. Leave `RESEND_TEMPLATE_ID` empty to use the built-in HTML email.
+
+Start the API in one terminal:
+
+```bash
+uvicorn app.main:app --reload --port 8080 --app-dir backend
+```
+
+Install and start the frontend in a second terminal:
+
+```bash
+cd frontend
+npm ci
+NEXT_PUBLIC_API_URL=http://localhost:8080 npm run dev
+```
+
+Open <http://localhost:3000>. The frontend defaults to
+`http://localhost:8080` when `NEXT_PUBLIC_API_URL` is not set.
+
+The frontend scripts are:
+
+```bash
+npm run dev
+npm run lint
+npm run build
+npm run start
+```
+
+## Development bypass
+
+Set this in `backend/.env`:
+
+```env
+DEV_BYPASS=true
+CAMERA_BYPASS_IMAGE=frontend/public/image.jpg
+```
+
+With `DEV_BYPASS=true`:
+
+- Preview and capture use the configured local JPEG instead of `gphoto2`.
+- Bypass captures are not written to `data/images`; their `local_path` is null.
+- Resend is not called; delivery returns `status: "skipped"`.
+- MySQL startup, reads, and writes are disabled even if `MYSQL_HOST` is set.
+
+Set `DEV_BYPASS=false` for physical camera and email testing. The legacy
+`CAMERA_BYPASS` variable is still accepted as a fallback, but new setups
+should use `DEV_BYPASS`.
+
+## Camera operation
+
+The preview screen requests a fresh frame every 1.5 seconds through the API.
+Physical preview uses `gphoto2 --capture-preview`. Capture uses
+`gphoto2 --capture-image-and-download`, saves a UUID-named JPEG under
+`PHOTO_STORAGE_DIR` (default: `data/images`), and returns the image to the
+browser for review. The saved local path is returned as `local_path` and is
+stored in MySQL with the capture session.
+
+The camera adapter times out preview after 15 seconds and capture after 60
+seconds. A missing camera, failed command, timeout, or missing output file is
+returned as an HTTP `503` error.
+
+Before an event, verify the exact camera and Pi combination:
+
+```bash
+gphoto2 --version
+gphoto2 --auto-detect
+gphoto2 --capture-image-and-download
+```
+
+## Image bucket
+
+Set the S3-compatible bucket variables in `backend/.env` to upload each real
+capture after it is saved locally:
+
+```env
+S3_BUCKET=portrait-booth-images
+S3_REGION=us-east-1
+S3_ENDPOINT_URL=
+S3_PUBLIC_BASE_URL=https://images.example.com
+S3_ACCESS_KEY_ID=your-access-key
+S3_SECRET_ACCESS_KEY=your-secret-key
+```
+
+`S3_ENDPOINT_URL` is optional for AWS S3 and should be set for providers such
+as Cloudflare R2. `S3_PUBLIC_BASE_URL` should be the public base URL for the
+bucket or its custom domain. The object key is:
+
+```text
+sessions/<session-id>/<filename>.jpg
+```
+
+The capture response includes `remote_url`, and MySQL stores that URL with the
+local path. The bucket must allow public reads because this configuration is
+intended to provide a public image URL. Keep the access keys only in the
+backend environment; never add them to `NEXT_PUBLIC_*` variables.
 
 ## MySQL persistence
 
-For the easiest desktop setup, install Docker Desktop, copy the MySQL values
-from `backend/.env.example`, and start the database from the repository root:
+Start the local MySQL service:
 
 ```bash
 docker compose up -d mysql
 ```
 
-The database is available at `127.0.0.1:3306` and persists in the
-`mysql_data` Docker volume. The API creates its tables automatically on startup.
+The service uses the ARM64-compatible `mysql:8.4` image, publishes
+`127.0.0.1:3306`, and stores data in the persistent `mysql_data` Docker volume.
+The API creates these tables on startup:
 
-### Raspberry Pi
+- `sessions`
+- `photos`
+- `deliveries`
 
-Use Raspberry Pi OS 64-bit and install Docker Engine and the Compose plugin.
-From the project directory on the Pi, start the database with:
+Configure the backend with:
+
+```env
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=portrait_booth
+MYSQL_PASSWORD=portrait-booth-local
+MYSQL_DATABASE=portrait_booth
+```
+
+The Compose defaults match these values. Leave `MYSQL_HOST` empty to disable
+MySQL, or enable `DEV_BYPASS` to disable it automatically during development.
+
+Useful database commands:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d mysql
+docker compose exec mysql mysql -u portrait_booth -p portrait_booth
+docker compose ps
+docker compose logs mysql
 ```
 
-This stores MySQL files in `data/mysql`, so they remain on the Pi even if the
-container is recreated. Keep `MYSQL_HOST=127.0.0.1` in the Pi's
-`backend/.env` because the FastAPI process connects through the published local
-port. Back up `data/mysql` or use `mysqldump` before changing storage devices.
+Stop the service without deleting data:
 
-For a manually installed MySQL server, create the database and user instead:
-
-```sql
-CREATE DATABASE portrait_booth CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'portrait_booth'@'localhost' IDENTIFIED BY 'change-this-password';
-GRANT ALL PRIVILEGES ON portrait_booth.* TO 'portrait_booth'@'localhost';
-FLUSH PRIVILEGES;
+```bash
+docker compose stop mysql
 ```
 
-When `MYSQL_HOST` is set, the API creates the `sessions`, `photos`, and
-`deliveries` tables on startup. Captures and successful Resend deliveries are
-then linked by `session_id`. Leave `MYSQL_HOST` empty to run without MySQL.
+Do not run `docker compose down -v` unless you intend to delete the database
+volume.
 
-For local development without a connected camera or Resend credentials, set
-`DEV_BYPASS=true` and optionally point `CAMERA_BYPASS_IMAGE` at a JPEG. This
-uses the image for preview/capture and skips the Resend request while returning
-a successful development response. Leave it set to `false` for the event.
+## Raspberry Pi deployment
+
+Use Raspberry Pi OS 64-bit and install Docker Engine with the Compose plugin.
+The official MySQL image is multi-architecture, so the same Compose command
+works on the Pi:
+
+```bash
+docker compose up -d mysql
+```
+
+Keep `MYSQL_HOST=127.0.0.1` because the FastAPI process runs on the Pi host and
+connects through the published local port. Install the backend dependencies in
+the Pi virtual environment, install `gphoto2`, and start the API from the
+repository root:
+
+```bash
+sudo apt update
+sudo apt install -y gphoto2 python3-venv
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r backend/requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --app-dir backend
+```
+
+The frontend can be served with `npm run build && npm run start`, or hosted
+behind the local network's preferred web server. Do not expose the Pi API to
+the public internet or forward its port publicly.
+
+## API
+
+All routes use the `/api/v1` prefix.
+
+### `GET /health`
+
+Returns application, email provider, and database status.
+
+### `POST /camera/preview`
+
+Returns a temporary preview as a base64 image data URL. It does not save a
+photo. Camera errors return `503`.
+
+### `POST /capture`
+
+Captures and locally saves a photo, then returns:
+
+```json
+{
+	"status": "captured",
+	"image_data_url": "data:image/jpeg;base64,...",
+	"session_id": "uuid",
+	"local_path": "/path/to/project/data/images/uuid.jpg",
+	"remote_url": "https://images.example.com/sessions/uuid/uuid.jpg"
+}
+```
+
+### `POST /deliveries/email`
+
+Accepts `name`, `email`, `image_data_url`, and an optional `session_id`.
+Normal mode sends the image through Resend and returns the provider message ID.
+Development bypass mode returns `provider_id: "dev-bypass"` without sending.
+
+## Current limitations
+
+This is an end-to-end booth prototype, not yet a production queueing system.
+
+- Capture creates a session per capture; a separate multi-capture session API is
+	not implemented.
+- Upload retry workers and offline delivery queues are not implemented.
+- The email request still carries the image as a base64 data URL for delivery;
+	MySQL stores only the local image path.
+- Preview polling serializes camera commands through separate `gphoto2` calls;
+	benchmark this on the exact Pi and camera hardware.
+- Automatic retention cleanup, operator authentication, and systemd service
+	files still need to be added before a public event.
+
+## License
+
+Copyright (C) 2026 Bloom Communication.
+
+This project is licensed under the GNU General Public License, version 3 or any
+later version. See [LICENSE](LICENSE) for the full license text.

@@ -5,6 +5,7 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
 type CapturedPhoto = {
   imageDataUrl: string
   sessionId: string
+  remoteUrl: string | null
 }
 
 export async function previewPhoto(): Promise<string> {
@@ -29,6 +30,7 @@ export async function capturePhoto(): Promise<CapturedPhoto> {
   return {
     imageDataUrl: body.image_data_url,
     sessionId: body.session_id,
+    remoteUrl: body.remote_url,
   }
 }
 
@@ -36,6 +38,7 @@ export async function sendPhotoByEmail(
   guest: GuestInfo,
   imageDataUrl: string | null,
   sessionId: string | null,
+  imageUrl: string | null,
 ): Promise<void> {
   const response = await fetch(`${apiUrl}/api/v1/deliveries/email`, {
     method: 'POST',
@@ -44,6 +47,7 @@ export async function sendPhotoByEmail(
       name: guest.name,
       email: guest.email,
       image_data_url: imageDataUrl,
+      image_url: imageUrl,
       session_id: sessionId,
     }),
   })

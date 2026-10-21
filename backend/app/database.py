@@ -61,7 +61,9 @@ def initialize() -> None:
 		CREATE TABLE IF NOT EXISTS photos (
 			id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 			session_id CHAR(36) NOT NULL,
-			image_data_url LONGTEXT NOT NULL,
+			local_path VARCHAR(1024) NOT NULL,
+			remote_url VARCHAR(2048) NULL,
+			image_data_url LONGTEXT NULL,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			CONSTRAINT photos_session_fk FOREIGN KEY (session_id) REFERENCES sessions(id)
 		)
@@ -77,6 +79,11 @@ def initialize() -> None:
 			CONSTRAINT deliveries_session_fk FOREIGN KEY (session_id) REFERENCES sessions(id)
 		)
 		""",
+	)
+	statements += (
+		"ALTER TABLE photos ADD COLUMN IF NOT EXISTS local_path VARCHAR(1024) NULL",
+		"ALTER TABLE photos ADD COLUMN IF NOT EXISTS remote_url VARCHAR(2048) NULL",
+		"ALTER TABLE photos MODIFY COLUMN image_data_url LONGTEXT NULL",
 	)
 
 	try:
@@ -98,12 +105,12 @@ def create_session(session_id: str) -> None:
 		cursor.close()
 
 
-def record_photo(session_id: str, image_data_url: str) -> None:
+def record_photo(session_id: str, local_path: str, remote_url: str | None) -> None:
 	with connection() as db:
 		cursor = db.cursor()
 		cursor.execute(
-			"INSERT INTO photos (session_id, image_data_url) VALUES (%s, %s)",
-			(session_id, image_data_url),
+			"INSERT INTO photos (session_id, local_path, remote_url) VALUES (%s, %s, %s)",
+			(session_id, local_path, remote_url),
 		)
 		cursor.execute(
 			"UPDATE sessions SET status = 'captured' WHERE id = %s",

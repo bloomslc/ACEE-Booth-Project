@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from .camera import CameraCaptureError, capture_photo, capture_preview, is_dev_bypass
 from .database import DatabaseError, create_session, initialize, is_configured, record_delivery, record_photo
 from .email import EmailDelivery, EmailDeliveryError, send_photo_email
+from .storage import ImageStorageError, upload_image
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -18,6 +19,7 @@ class EmailDeliveryRequest(BaseModel):
 	name: str = Field(default="Guest", max_length=120)
 	email: EmailStr
 	image_data_url: str | None = None
+	image_url: str | None = None
 	session_id: str | None = None
 
 
@@ -30,6 +32,8 @@ class CaptureResponse(BaseModel):
 	status: str
 	image_data_url: str
 	session_id: str
+	local_path: str | None
+	remote_url: str | None
 
 
 class PreviewResponse(BaseModel):
@@ -60,19 +64,32 @@ def health() -> dict[str, str]:
 @app.post("/api/v1/capture", response_model=CaptureResponse)
 def capture() -> CaptureResponse:
 	try:
-		image_data_url = capture_photo()
+		captured_photo = capture_photo()
 	except CameraCaptureError as error:
 		raise HTTPException(status_code=503, detail=str(error)) from error
 
 	session_id = str(uuid4())
-	if is_configured():
+	remote_url = None
+	if captured_photo.local_path and not is_dev_bypass() and os.getenv("S3_BUCKET"):
+		try:
+			remote_url = upload_image(captured_photo.local_path, session_id)
+		except ImageStorageError as error:
+			raise HTTPException(status_code=502, detail=str(error)) from error
+
+	if is_configured() and captured_photo.local_path:
 		try:
 			create_session(session_id)
-			record_photo(session_id, image_data_url)
+			record_photo(session_id, captured_photo.local_path, remote_url)
 		except DatabaseError as error:
 			raise HTTPException(status_code=503, detail=str(error)) from error
 
-	return CaptureResponse(status="captured", image_data_url=image_data_url, session_id=session_id)
+	return CaptureResponse(
+		status="captured",
+		image_data_url=captured_photo.image_data_url,
+		session_id=session_id,
+		local_path=captured_photo.local_path,
+		remote_url=remote_url,
+	)
 
 
 @app.post("/api/v1/camera/preview", response_model=PreviewResponse)
@@ -97,6 +114,8 @@ def deliver_email(request: EmailDeliveryRequest) -> EmailDeliveryResponse:
 					recipient=str(request.email),
 					guest_name=request.name.strip(),
 					image_data_url=request.image_data_url,
+					image_url=request.image_url,
+					session_id=request.session_id,
 				)
 			)
 		except EmailDeliveryError as error:
