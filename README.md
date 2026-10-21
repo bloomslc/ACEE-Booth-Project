@@ -155,7 +155,7 @@ bucket or its custom domain. The object key is:
 sessions/<session-id>/<filename>.jpg
 ```
 
-The capture response includes `remote_url`, and MySQL stores that URL with the
+The capture response includes `remote_url`, and Neon stores that URL with the
 local path. The bucket must allow public reads because this configuration is
 intended to provide a public image URL. Keep the access keys only in the
 backend environment; never add them to `NEXT_PUBLIC_*` variables.
