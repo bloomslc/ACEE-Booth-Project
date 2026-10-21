@@ -10,8 +10,16 @@ class CameraCaptureError(RuntimeError):
 	"""Raised when the connected camera cannot capture an image."""
 
 
+def is_dev_bypass() -> bool:
+	return os.getenv("DEV_BYPASS", os.getenv("CAMERA_BYPASS", "false")).lower() in {
+		"1",
+		"true",
+		"yes",
+	}
+
+
 def _bypass_image() -> str | None:
-	if os.getenv("CAMERA_BYPASS", "false").lower() not in {"1", "true", "yes"}:
+	if not is_dev_bypass():
 		return None
 
 	image_path = Path(os.getenv("CAMERA_BYPASS_IMAGE", "frontend/public/image.jpg"))

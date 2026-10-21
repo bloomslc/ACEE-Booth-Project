@@ -83,6 +83,7 @@ When `MYSQL_HOST` is set, the API creates the `sessions`, `photos`, and
 `deliveries` tables on startup. Captures and successful Resend deliveries are
 then linked by `session_id`. Leave `MYSQL_HOST` empty to run without MySQL.
 
-For local development without a connected camera, set `CAMERA_BYPASS=true` and
-optionally point `CAMERA_BYPASS_IMAGE` at a JPEG. This bypass applies to both
-the live preview and capture endpoints; leave it set to `false` for the event.
+For local development without a connected camera or Resend credentials, set
+`DEV_BYPASS=true` and optionally point `CAMERA_BYPASS_IMAGE` at a JPEG. This
+uses the image for preview/capture and skips the Resend request while returning
+a successful development response. Leave it set to `false` for the event.

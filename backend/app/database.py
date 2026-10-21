@@ -14,7 +14,8 @@ class DatabaseError(RuntimeError):
 
 
 def is_configured() -> bool:
-	return bool(os.getenv("MYSQL_HOST"))
+	dev_bypass = os.getenv("DEV_BYPASS", os.getenv("CAMERA_BYPASS", "false"))
+	return bool(os.getenv("MYSQL_HOST")) and dev_bypass.lower() not in {"1", "true", "yes"}
 
 
 def _connection() -> Connection:

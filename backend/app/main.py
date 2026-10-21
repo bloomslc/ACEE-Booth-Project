@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 from dotenv import load_dotenv
 
-from .camera import CameraCaptureError, capture_photo, capture_preview
+from .camera import CameraCaptureError, capture_photo, capture_preview, is_dev_bypass
 from .database import DatabaseError, create_session, initialize, is_configured, record_delivery, record_photo
 from .email import EmailDelivery, EmailDeliveryError, send_photo_email
 
@@ -87,21 +87,26 @@ def preview() -> PreviewResponse:
 
 @app.post("/api/v1/deliveries/email", response_model=EmailDeliveryResponse)
 def deliver_email(request: EmailDeliveryRequest) -> EmailDeliveryResponse:
-	try:
-		provider_id = send_photo_email(
-			EmailDelivery(
-				recipient=str(request.email),
-				guest_name=request.name.strip(),
-				image_data_url=request.image_data_url,
+	if is_dev_bypass():
+		provider_id = "dev-bypass"
+		status = "skipped"
+	else:
+		try:
+			provider_id = send_photo_email(
+				EmailDelivery(
+					recipient=str(request.email),
+					guest_name=request.name.strip(),
+					image_data_url=request.image_data_url,
+				)
 			)
-		)
-	except EmailDeliveryError as error:
-		raise HTTPException(status_code=502, detail=str(error)) from error
+		except EmailDeliveryError as error:
+			raise HTTPException(status_code=502, detail=str(error)) from error
+		status = "sent"
 
 	if is_configured():
 		try:
-			record_delivery(request.session_id, str(request.email), provider_id)
+			record_delivery(request.session_id, str(request.email), provider_id, status)
 		except DatabaseError as error:
 			raise HTTPException(status_code=503, detail=str(error)) from error
 
-	return EmailDeliveryResponse(status="sent", provider_id=provider_id)
+	return EmailDeliveryResponse(status=status, provider_id=provider_id)
