@@ -1,6 +1,7 @@
 import type { GuestInfo } from './booth-config'
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
+const frontendDevBypass = process.env.NEXT_PUBLIC_DEV_BYPASS === 'true'
 
 type CapturedPhoto = {
   imageDataUrl: string
@@ -9,6 +10,10 @@ type CapturedPhoto = {
 }
 
 export async function previewPhoto(): Promise<string> {
+  if (frontendDevBypass) {
+    return '/image.jpg'
+  }
+
   const response = await fetch(`${apiUrl}/api/v1/camera/preview`, { method: 'POST' })
   const body = await response.json().catch(() => null)
 
@@ -20,6 +25,14 @@ export async function previewPhoto(): Promise<string> {
 }
 
 export async function capturePhoto(): Promise<CapturedPhoto> {
+  if (frontendDevBypass) {
+    return {
+      imageDataUrl: '/image.jpg',
+      sessionId: crypto.randomUUID(),
+      remoteUrl: null,
+    }
+  }
+
   const response = await fetch(`${apiUrl}/api/v1/capture`, { method: 'POST' })
   const body = await response.json().catch(() => null)
 
@@ -40,6 +53,10 @@ export async function sendPhotoByEmail(
   sessionId: string | null,
   imageUrl: string | null,
 ): Promise<void> {
+  if (frontendDevBypass) {
+    return
+  }
+
   const response = await fetch(`${apiUrl}/api/v1/deliveries/email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -112,6 +112,17 @@ With `DEV_BYPASS=true`:
 
 Set `DEV_BYPASS=false` for physical camera and email testing.
 
+To bypass the backend entirely from the browser, create `frontend/.env.local`
+with:
+
+```env
+NEXT_PUBLIC_DEV_BYPASS=true
+```
+
+This uses `frontend/public/image.jpg`, creates a browser-side session UUID, and
+skips preview, capture, database, bucket, and email API requests. Restart the
+Next.js dev server after changing this value.
+
 ## Camera operation
 
 The preview screen requests a fresh frame every 1.5 seconds through the API.
