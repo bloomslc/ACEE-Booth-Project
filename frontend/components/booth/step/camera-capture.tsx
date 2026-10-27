@@ -68,7 +68,7 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
             <BoothStructureAction action={3}>
                 <button
                     onClick={onCancel}
-                    className="min-w-0 cursor-pointer flex items-center justify-center gap-2"
+                    className="min-w-0 cursor-pointer flex items-center justify-center gap-2 text-foreground"
                 >
                     <ArrowLeft size={20} />
                     <span>Back</span>
@@ -84,7 +84,7 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
                         <span className="size-12 rounded-full bg-red-500 transition-transform group-active:scale-90" />
                     </button>
                 </div>
-                <span className="min-w-0 text-center">
+                <span className="min-w-0 text-center text-foreground">
                     Tap to shoot
                 </span>
             </BoothStructureAction>

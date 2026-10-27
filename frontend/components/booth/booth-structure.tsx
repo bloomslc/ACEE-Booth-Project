@@ -16,7 +16,7 @@ interface BoothStructureActionProps {
 
 export default function BoothStructure({ children }: BoothStructureProps) {
     return (
-        <section className="grid grid-rows-[1fr_7fr_1fr] gap-4 border aspect-1488/2266 h-[90vh] max-w-[90vw] overflow-hidden px-18 py-10">
+        <section className="grid grid-rows-[1fr_7fr_1fr] gap-4 lg:border aspect-1488/2266 h-screen w-auto overflow-hidden px-19 py-10">
             <BoothHeader />
             {children}
         </section>

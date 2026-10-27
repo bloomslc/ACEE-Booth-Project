@@ -26,15 +26,15 @@ export default function GuestForm({ onSubmit, onCancel, isSending = false, error
     return (
         <BoothStructure>
             <BoothStructureContent>
-                <div className="flex flex-col justify-end gap-4 w-full h-full">
-                    <div>
+                <div className="grid grid-rows-[auto_1fr] justify-end gap-4 w-full h-full">
+                    <div className="pb-5">
                         <h1 className="text-4xl font-bold">Who are we sending this to?</h1>
                         <p>Please fill out the form below to proceed.</p>
                     </div>
                     <form
                         id="guest-form"
                         onSubmit={handleSubmit}
-                        className="flex flex-col justify-center gap-4 w-full h-auto bg-gray-300 rounded-4xl p-4"
+                        className="flex flex-col justify-center gap-4 w-full h-auto bg-foreground text-text rounded-4xl p-4"
                     >
                         <label htmlFor="name">Name<span className="text-red-500">*</span></label>
                         <input
@@ -56,14 +56,14 @@ export default function GuestForm({ onSubmit, onCancel, isSending = false, error
                             placeholder="Email"
                             className="rounded-md border px-4 py-2 w-full"
                         />
-                        <span className="text-sm text-gray-500">By submitting this form, you agree to our Terms and Conditions.</span>
+                        <span className="text-sm text-gray-500">By submitting this form, you agree to Bloom to keep your name and email for the duration of the event. This data will be used to send you your photo. We are not responsible for any misuse of this information.</span>
                         {error && <span className="text-sm text-red-600">{error}</span>}
                     </form>
                 </div>
             </BoothStructureContent>
             <BoothStructureAction action={2}>
                 <Button onClick={onCancel} secondary square>
-                    <X size={30} color="black"/>
+                    <X size={30} color="#1A3666"/>
                 </Button>
                 <Button type="submit" form="guest-form" disabled={isSending}>
                     {isSending ? 'Sending...' : 'Send Photo'}
