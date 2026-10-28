@@ -31,8 +31,21 @@ body::before {
   background-image: url("/bloomBG.svg");
   background-repeat: space;
   background-size: 100px;
-  opacity: 0.25;
-  transform: translate(40px, 0px) rotate(-6deg);
+  opacity: 0.14;
+  transform: translate(50px, 0px) rotate(-6deg);
+  content: "";
+  pointer-events: none;
+}
+
+body::after {
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  background-image: url("/bloomBG.svg");
+  background-repeat: space;
+  background-size: 100px;
+  opacity: 0.14;
+  transform: translate(-10px, -50px) rotate(-6deg);
   content: "";
   pointer-events: none;
 }
