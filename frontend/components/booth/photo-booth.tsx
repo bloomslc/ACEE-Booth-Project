@@ -33,7 +33,7 @@ export default function PhotoBooth() {
     }, [])
 
     return (
-        <main>
+        <main className='flex h-full w-full justify-center'>
             {step === 'home' && (
                 <BoothHome 
                     onBegin={() => {
