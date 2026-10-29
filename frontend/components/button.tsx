@@ -1,18 +1,25 @@
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "style"> {
     children: React.ReactNode;
-    secondary?: boolean;
-    square?: boolean;
-    ghost?: boolean;
+    style?: "secondary" | "ghost" | "default";
     classname?: string;
+    type?: "button" | "submit" | "reset";
+    onClick?: () => void;
 }
 
-export default function Button({ onClick, children, type, secondary, ghost, square, classname, ...props }: ButtonProps) {
+export default function Button({ onClick, children, type, style, classname, ...props }: ButtonProps) {
+    const Style =
+        style === "secondary"
+            ? "bg-button-background text-white"
+            : style === "ghost"
+              ? "bg-transparent border border-white text-text"
+              : "bg-red-500 text-white";
+
     return (
         <button
             {...props}
             onClick={onClick}
             type={type}
-            className={`cursor-pointer ${secondary ? 'bg-button-background' : 'bg-red-500'} ${ghost ? 'bg-transparent border border-white' : ''} ${square ? 'aspect-square' : 'aspect-auto'} text-white text-lg rounded-full w-full h-full flex gap-4 justify-center items-center ${classname || ''}`}
+            className={`cursor-pointer ${Style} text-lg rounded-4xl w-auto h-full flex gap-4 justify-center items-center ${classname || ''}`}
         >
             {children}
         </button>

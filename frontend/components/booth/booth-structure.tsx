@@ -16,16 +16,18 @@ interface BoothStructureActionProps {
 
 export default function BoothStructure({ children }: BoothStructureProps) {
     return (
-        <section className="grid grid-rows-[1fr_7fr_1fr] gap-4 lg:border aspect-1488/2266 h-screen w-auto overflow-hidden px-19 py-10">
+        <section className="grid grid-rows-[1fr_7fr] lg:border lg:aspect-1488/2266 h-screen w-auto overflow-hidden px-10 py-10">
             <BoothHeader />
-            {children}
+            <div className="h-full w-full grid grid-rows-[7fr_1fr] bg-foreground gap-4 rounded-4xl overflow-hidden">
+                {children}
+            </div>
         </section>
     );
 }
 
 export function BoothStructureContent({ children }: BoothStructureContentProps) {
     return (
-        <div className={`flex flex-col h-full min-h-0 flex-1`}>
+        <div className={`flex flex-col h-full min-h-0 flex-1 p-4`}>
             {children}
         </div>
     );
@@ -34,13 +36,13 @@ export function BoothStructureContent({ children }: BoothStructureContentProps) 
 export function BoothStructureAction({ children, action }: BoothStructureActionProps) {
     const columns =
         action === 1
-            ? "grid-cols-[1fr]"
+            ? "grid-cols-1"
             : action === 2
-              ? "grid-cols-[1fr_4fr]"
-              : "grid-cols-[1fr_3fr_1fr]";
+              ? "grid-cols-2"
+              : "grid-cols-3";
 
     return (
-        <div className={`grid min-h-0 min-w-0 w-full items-center gap-4 ${columns}`}>
+        <div className={`grid max-h-full w-full items-center p-4 gap-4 overflow-hidden ${columns}`}>
             {children}
         </div>
     );

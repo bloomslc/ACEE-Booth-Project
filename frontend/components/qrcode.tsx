@@ -10,25 +10,22 @@ export default function Qrcode( { value }: QrcodeProps ) {
         <div>
             <ReactQRCode
                 finderPatternInnerSettings={{
-                    style: 'rounded-lg',
                     color: '#1A3666',
                 }}
                 finderPatternOuterSettings={{
-                    style: 'leaf',
                     color: '#1A3666',
                 }}
                 imageSettings={{
                     src: '/bloom.svg',
-                    width: 35,
-                    height: 35,
+                    width: 30,
+                    height: 30,
                     excavate: true,
                     opacity: 1,
                 }}
                 dataModulesSettings={{
-                    style: 'square-sm',
                     color: '#1A3666',
                 }}
-                size={256}
+                size={250}
                 value={value}
             />
         </div>

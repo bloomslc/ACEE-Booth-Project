@@ -3,6 +3,7 @@ import Image from "next/image";
 import BoothStructure, { BoothStructureContent, BoothStructureAction } from "../booth-structure";
 import { capturePhoto, previewPhoto } from "@/libs/api";
 import { useEffect, useRef, useState } from "react";
+import Button from "@/components/button";
 
 interface CameraCaptureProps {
     onCapture: (dataUrl: string, sessionId: string, remoteUrl: string | null) => void;
@@ -66,25 +67,27 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
                 </div>
             </BoothStructureContent>
             <BoothStructureAction action={3}>
-                <button
+                <Button
                     onClick={onCancel}
-                    className="min-w-0 cursor-pointer flex items-center justify-center gap-2 text-foreground"
+                    style="ghost"
+                    className="min-w-0 cursor-pointer flex items-center justify-center gap-2"
                 >
                     <ArrowLeft size={20} />
                     <span>Back</span>
-                </button>
+                </Button>
                 <div className="flex min-w-0 h-full items-center justify-center">
-                    <button
+                    <Button
                         onClick={() => void handleCapture()}
                             type="button"
                             aria-label="Take photo"
                             disabled={isCapturing}
+                            style="ghost"
                             className="group flex size-17 items-center justify-center rounded-full border-4 border-red-500 transition-transform active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                         >
                         <span className="size-12 rounded-full bg-red-500 transition-transform group-active:scale-90" />
-                    </button>
+                    </Button>
                 </div>
-                <span className="min-w-0 text-center text-foreground">
+                <span className="min-w-0 text-center text-text">
                     Tap to shoot
                 </span>
             </BoothStructureAction>

@@ -27,7 +27,7 @@ export default function GuestForm({ onSubmit, onCancel, isSending = false, error
         <BoothStructure>
             <BoothStructureContent>
                 <div className="grid grid-rows-[auto_1fr] justify-end gap-4 w-full h-full">
-                    <div className="pb-5">
+                    <div className="pb-5 text-text">
                         <h1 className="text-4xl font-bold">Who are we sending this to?</h1>
                         <p>Please fill out the form below to proceed.</p>
                     </div>
@@ -62,7 +62,7 @@ export default function GuestForm({ onSubmit, onCancel, isSending = false, error
                 </div>
             </BoothStructureContent>
             <BoothStructureAction action={2}>
-                <Button onClick={onCancel} secondary square>
+                <Button onClick={onCancel} style="secondary">
                     <X size={30} color="#1A3666"/>
                 </Button>
                 <Button type="submit" form="guest-form" disabled={isSending}>
