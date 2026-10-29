@@ -18,7 +18,7 @@ export default function BoothStructure({ children }: BoothStructureProps) {
     return (
         <section className="grid h-full w-full max-w-full grid-rows-[1fr_7fr] overflow-hidden px-10 py-10 lg:aspect-1488/2266 lg:w-auto lg:border">
             <BoothHeader />
-            <div className="h-full w-full grid grid-rows-[7fr_1fr] bg-foreground gap-4 rounded-4xl overflow-hidden">
+            <div className="h-full w-full grid grid-rows-[6fr_1fr] bg-foreground gap-4 rounded-4xl overflow-hidden">
                 {children}
             </div>
         </section>
