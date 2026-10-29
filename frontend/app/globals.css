@@ -49,7 +49,3 @@ body::after {
   content: "";
   pointer-events: none;
 }
-
-* {
-  border: green 1px solid;
-}
