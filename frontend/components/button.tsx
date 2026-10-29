@@ -11,7 +11,7 @@ export default function Button({ onClick, children, type, style, classname, ...p
         style === "secondary"
             ? "bg-button-background text-white"
             : style === "ghost"
-              ? "bg-transparent border border-white text-text"
+              ? "bg-transparent text-text"
               : "bg-red-500 text-white";
 
     return (
