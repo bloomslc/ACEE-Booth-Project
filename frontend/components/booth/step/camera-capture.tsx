@@ -78,12 +78,12 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
                 <div className="flex min-w-0 h-full items-center justify-center">
                     <button
                         onClick={() => void handleCapture()}
-                            type="button"
-                            aria-label="Take photo"
-                            disabled={isCapturing}
-                            className="group flex size-17 items-center justify-center rounded-full border-4 border-red-500 transition-transform active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-                        >
-                        <span className="size-12 rounded-full bg-red-500 transition-transform group-active:scale-90" />
+                        type="button"
+                        aria-label="Take photo"
+                        disabled={isCapturing}
+                        className="group flex h-full w-auto aspect-square items-center justify-center rounded-full border-3 border-red-500 transition-transform active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                    >
+                        <span className="h-auto w-auto aspect-square p-5.5 rounded-full bg-red-500 transition-transform group-active:scale-90" />
                     </button>
                 </div>
                 <span className="min-w-0 text-center text-text">
