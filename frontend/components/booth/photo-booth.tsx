@@ -57,7 +57,7 @@ export default function PhotoBooth() {
 
             {step === 'review' && (
                 <PhotoReview
-                    photo={photo!}
+                    photo={remoteUrl!}
                     onAccept={() => setStep('guest')}
                     onCancel={startNewSession}
                     onRetake={() => {
