@@ -2,9 +2,10 @@ import { ReactQRCode } from "@lglab/react-qr-code";
 
 interface QrcodeProps {
     value: string;
+    type?: "bloom" | "instagram" | "linkedin" | "facebook";
 }
 
-export default function Qrcode( { value }: QrcodeProps ) {
+export default function Qrcode( { value, type = "bloom" }: QrcodeProps ) {
 
     return (
         <div>
@@ -16,7 +17,7 @@ export default function Qrcode( { value }: QrcodeProps ) {
                     color: '#1A3666',
                 }}
                 imageSettings={{
-                    src: '/bloom.svg',
+                    src: `/${type}.svg`,
                     width: 30,
                     height: 30,
                     excavate: true,

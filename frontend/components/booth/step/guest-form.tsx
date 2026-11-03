@@ -34,7 +34,7 @@ export default function GuestForm({ onSubmit, onCancel, isSending = false, error
                     <form
                         id="guest-form"
                         onSubmit={handleSubmit}
-                        className="flex flex-col justify-center gap-4 w-full h-auto bg-foreground text-text rounded-4xl p-4"
+                        className="flex flex-col justify-center gap-4 w-full h-auto bg-foreground text-text rounded-4xl"
                     >
                         <label htmlFor="name">Name<span className="text-red-500">*</span></label>
                         <input
