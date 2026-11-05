@@ -6,6 +6,7 @@
       "name": "acee-booth-project",
       "dependencies": {
         "@lglab/react-qr-code": "^1.8.1",
+        "@vercel/global-config": "^1.5.1",
         "lucide-react": "^1.60.0",
         "next": "16.4.3",
         "react": "19.3.0",
@@ -556,6 +557,10 @@
     "@vercel/gatsby-plugin-vercel-analytics": ["@vercel/gatsby-plugin-vercel-analytics@1.0.12", "", { "dependencies": { "web-vitals": "0.2.4" } }, "sha512-Ejlhwxr7EBYJxtwYnlh6Vm6A2dPsUSPxMdYrfv0koZkgAzVwo7cG4aDQiy7iASMaGzwuI/PAnwlY2sJBF5b4OA=="],
 
     "@vercel/gatsby-plugin-vercel-builder": ["@vercel/gatsby-plugin-vercel-builder@2.2.81", "", { "dependencies": { "@sinclair/typebox": "0.25.24", "@vercel/build-utils": "15.1.0", "esbuild": "0.27.0", "etag": "1.8.1", "fs-extra": "11.1.0" } }, "sha512-ZGUkbJY7tg4A0x8Ac3s+i8fvz4/zAj1Nr0Y/5g4wWEG5FigtyuHCgQ3ip8MPLl4rU834pKwEuE+c1zZlPFURFQ=="],
+
+    "@vercel/global-config": ["@vercel/global-config@1.5.1", "", { "dependencies": { "@vercel/global-config-fs": "0.1.0" }, "peerDependencies": { "@opentelemetry/api": "^1.7.0", "next": ">=1" }, "optionalPeers": ["@opentelemetry/api", "next"] }, "sha512-PUJaoyMGuSLdKnBgYIqeH1i6U3G+5noLvvJLqI8IPP5+P0b2Q5EcBBraFRh6ctNY/yTpb40klyLYyE3X0OPmKQ=="],
+
+    "@vercel/global-config-fs": ["@vercel/global-config-fs@0.1.0", "", {}, "sha512-xxMUwf96H/qKTA4Az+uh3xlVWkwnN3z400P5gex0uUsU8pe99njopYVyKVoUTfu8gN9xbHqaigWaIBr1+lufMg=="],
 
     "@vercel/go": ["@vercel/go@26.0.0", "", { "peerDependencies": { "@vercel/build-utils": "15.1.0" } }, "sha512-BO26H7YlxLDCyurGM2O0nAWAwgesh1Pay1M2YPv79KH6NdHj2HyZSpgDjKkEqOSK2yuMm4HdBc4EhIzN+9kK+w=="],
 
