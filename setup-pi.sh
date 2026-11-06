@@ -103,7 +103,7 @@ run_project() {
 		return 1
 	fi
 
-	local backend_command=".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 --app-dir backend"
+	local backend_command=".venv/bin/uvicorn app.main:app --host 10.1.87.223 --port 8080 --app-dir backend"
 	local frontend_command="cd frontend && bun start"
 	if ! run_in_terminal "ACEE backend" "$backend_command" || ! run_in_terminal "ACEE frontend" "$frontend_command"; then
 		echo "No supported terminal emulator was found. Run these commands in two terminals:"

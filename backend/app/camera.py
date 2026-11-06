@@ -30,6 +30,10 @@ def photo_storage_dir() -> Path:
 	return _project_path("PHOTO_STORAGE_DIR", "data/images")
 
 
+def bypass_image_path() -> Path:
+	return _project_path("DEV_BYPASS_IMAGE", "frontend/public/image.jpg")
+
+
 def is_dev_bypass() -> bool:
 	return os.getenv("DEV_BYPASS", "false").lower() in {
 		"1",
@@ -42,7 +46,7 @@ def _bypass_image_bytes() -> bytes | None:
 	if not is_dev_bypass():
 		return None
 
-	image_path = _project_path("DEV_BYPASS_IMAGE", "frontend/public/image.jpg")
+	image_path = bypass_image_path()
 	try:
 		return image_path.read_bytes()
 	except OSError as error:

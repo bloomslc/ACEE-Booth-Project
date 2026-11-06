@@ -4,11 +4,12 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 from dotenv import load_dotenv
 
-from .camera import CameraCaptureError, capture_photo, capture_preview, is_dev_bypass, photo_storage_dir
+from .camera import CameraCaptureError, bypass_image_path, capture_photo, capture_preview, is_dev_bypass, photo_storage_dir
 from .database import DatabaseError, create_session, initialize, is_configured, record_delivery, record_photo
 from .email import EmailDelivery, EmailDeliveryError, send_photo_email
 from .storage import ImageStorageError, upload_image
@@ -63,6 +64,13 @@ def health() -> dict[str, str]:
 	return {"status": "ok", "email_provider": "resend", "database": "neon" if is_configured() else "disabled"}
 
 
+@app.get("/api/v1/dev-bypass-image")
+def dev_bypass_image() -> FileResponse:
+	if not is_dev_bypass():
+		raise HTTPException(status_code=404, detail="Development bypass is disabled")
+	return FileResponse(bypass_image_path(), media_type="image/jpeg")
+
+
 @app.post("/api/v1/capture", response_model=CaptureResponse)
 def capture(request: Request) -> CaptureResponse:
 	try:
@@ -91,7 +99,7 @@ def capture(request: Request) -> CaptureResponse:
 		public_base_url = os.getenv("PUBLIC_BASE_URL", str(request.base_url).rstrip("/"))
 		image_url = f"{public_base_url.rstrip('/')}/images/{filename}"
 	if not image_url:
-		image_url = f"{os.getenv('FRONTEND_ORIGIN', 'http://localhost:3000').rstrip('/')}/image.jpg"
+		image_url = f"{str(request.base_url).rstrip('/')}/api/v1/dev-bypass-image"
 
 	return CaptureResponse(
 		status="captured",

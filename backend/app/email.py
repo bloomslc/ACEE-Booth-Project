@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from email.utils import parseaddr
 
 import httpx
 
@@ -23,6 +24,12 @@ def send_photo_email(delivery: EmailDelivery) -> str:
 		raise EmailDeliveryError(
 			"RESEND_API_KEY and RESEND_FROM_EMAIL must be configured"
 		)
+	_, sender_address = parseaddr(sender)
+	if "@" not in sender_address:
+		raise EmailDeliveryError(
+			"RESEND_FROM_EMAIL must be a verified address, for example "
+			'"Portrait Booth <booth@example.com>"'
+		)
 
 	payload: dict[str, object] = {"from": sender, "to": [delivery.recipient]}
 	template_id = os.getenv("RESEND_TEMPLATE_ID")
@@ -45,7 +52,7 @@ def send_photo_email(delivery: EmailDelivery) -> str:
 				"subject": "Your portrait booth photo",
 				"html": (
 					f"<p>Hi {delivery.guest_name or 'there'},</p>"
-					"<p>Thanks for visiting the portrait booth. Your photo is attached.</p>"
+					"<p>Thanks for visiting the portrait booth.</p>"
 				),
 			}
 		)
@@ -58,6 +65,9 @@ def send_photo_email(delivery: EmailDelivery) -> str:
 			timeout=20,
 		)
 		response.raise_for_status()
+	except httpx.HTTPStatusError as error:
+		detail = error.response.text[:500]
+		raise EmailDeliveryError(f"Resend rejected the email: {detail}") from error
 	except (httpx.HTTPError, ValueError) as error:
 		raise EmailDeliveryError("Resend rejected the email") from error
 
