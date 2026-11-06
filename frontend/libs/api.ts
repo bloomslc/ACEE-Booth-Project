@@ -4,7 +4,7 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
 const frontendDevBypass = process.env.NEXT_PUBLIC_DEV_BYPASS === 'true'
 
 type CapturedPhoto = {
-  imageDataUrl: string
+  imageUrl: string
   sessionId: string
   remoteUrl: string | null
 }
@@ -27,7 +27,7 @@ export async function previewPhoto(): Promise<string> {
 export async function capturePhoto(): Promise<CapturedPhoto> {
   if (frontendDevBypass) {
     return {
-      imageDataUrl: '/image.jpg',
+		imageUrl: '/image.jpg',
       sessionId: crypto.randomUUID(),
       remoteUrl: null,
     }
@@ -41,7 +41,7 @@ export async function capturePhoto(): Promise<CapturedPhoto> {
   }
 
   return {
-    imageDataUrl: body.image_data_url,
+    imageUrl: body.image_url,
     sessionId: body.session_id,
     remoteUrl: body.remote_url,
   }
@@ -49,9 +49,8 @@ export async function capturePhoto(): Promise<CapturedPhoto> {
 
 export async function sendPhotoByEmail(
   guest: GuestInfo,
-  imageDataUrl: string | null,
-  sessionId: string | null,
   imageUrl: string | null,
+  sessionId: string | null,
 ): Promise<void> {
   if (frontendDevBypass) {
     return
@@ -63,7 +62,6 @@ export async function sendPhotoByEmail(
     body: JSON.stringify({
       name: guest.name,
       email: guest.email,
-      image_data_url: imageDataUrl,
       image_url: imageUrl,
       session_id: sessionId,
     }),

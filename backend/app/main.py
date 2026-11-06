@@ -2,12 +2,13 @@ import os
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 from dotenv import load_dotenv
 
-from .camera import CameraCaptureError, capture_photo, capture_preview, is_dev_bypass
+from .camera import CameraCaptureError, capture_photo, capture_preview, is_dev_bypass, photo_storage_dir
 from .database import DatabaseError, create_session, initialize, is_configured, record_delivery, record_photo
 from .email import EmailDelivery, EmailDeliveryError, send_photo_email
 from .storage import ImageStorageError, upload_image
@@ -18,7 +19,6 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 class EmailDeliveryRequest(BaseModel):
 	name: str = Field(default="Guest", max_length=120)
 	email: EmailStr
-	image_data_url: str | None = None
 	image_url: str | None = None
 	session_id: str | None = None
 
@@ -30,7 +30,7 @@ class EmailDeliveryResponse(BaseModel):
 
 class CaptureResponse(BaseModel):
 	status: str
-	image_data_url: str
+	image_url: str
 	session_id: str
 	local_path: str | None
 	remote_url: str | None
@@ -48,6 +48,8 @@ app.add_middleware(
 	allow_methods=["POST", "GET"],
 	allow_headers=["Content-Type"],
 )
+photo_storage_dir().mkdir(parents=True, exist_ok=True)
+app.mount("/images", StaticFiles(directory=photo_storage_dir()), name="images")
 
 
 @app.on_event("startup")
@@ -62,7 +64,7 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/v1/capture", response_model=CaptureResponse)
-def capture() -> CaptureResponse:
+def capture(request: Request) -> CaptureResponse:
 	try:
 		captured_photo = capture_photo()
 	except CameraCaptureError as error:
@@ -83,9 +85,17 @@ def capture() -> CaptureResponse:
 		except DatabaseError as error:
 			raise HTTPException(status_code=503, detail=str(error)) from error
 
+	image_url = remote_url
+	if captured_photo.local_path and not image_url:
+		filename = Path(captured_photo.local_path).name
+		public_base_url = os.getenv("PUBLIC_BASE_URL", str(request.base_url).rstrip("/"))
+		image_url = f"{public_base_url.rstrip('/')}/images/{filename}"
+	if not image_url:
+		image_url = f"{os.getenv('FRONTEND_ORIGIN', 'http://localhost:3000').rstrip('/')}/image.jpg"
+
 	return CaptureResponse(
 		status="captured",
-		image_data_url=captured_photo.image_data_url,
+		image_url=image_url,
 		session_id=session_id,
 		local_path=captured_photo.local_path,
 		remote_url=remote_url,
@@ -113,7 +123,6 @@ def deliver_email(request: EmailDeliveryRequest) -> EmailDeliveryResponse:
 				EmailDelivery(
 					recipient=str(request.email),
 					guest_name=request.name.strip(),
-					image_data_url=request.image_data_url,
 					image_url=request.image_url,
 					session_id=request.session_id,
 				)

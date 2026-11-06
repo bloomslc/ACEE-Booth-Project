@@ -13,7 +13,6 @@ class CameraCaptureError(RuntimeError):
 
 @dataclass(frozen=True)
 class CapturedPhoto:
-	image_data_url: str
 	local_path: str | None
 
 
@@ -23,6 +22,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def _project_path(environment_name: str, default: str) -> Path:
 	configured_path = Path(os.getenv(environment_name, default))
 	return configured_path if configured_path.is_absolute() else PROJECT_ROOT / configured_path
+
+
+def photo_storage_dir() -> Path:
+	return _project_path("PHOTO_STORAGE_DIR", "data/images")
 
 
 def is_dev_bypass() -> bool:
@@ -81,16 +84,12 @@ def capture_preview() -> str:
 
 
 def capture_photo() -> CapturedPhoto:
-	"""Capture and persist a JPEG, returning its browser data and local path."""
+	"""Capture and persist a JPEG, returning its local path."""
 	bypass_image = _bypass_image_bytes()
 	if bypass_image:
-		encoded = base64.b64encode(bypass_image).decode("ascii")
-		return CapturedPhoto(
-			image_data_url=f"data:image/jpeg;base64,{encoded}",
-			local_path=None,
-		)
+		return CapturedPhoto(local_path=None)
 
-	output_dir = _project_path("PHOTO_STORAGE_DIR", "data/images")
+	output_dir = photo_storage_dir()
 	output_dir.mkdir(parents=True, exist_ok=True)
 	output_path = output_dir / f"{uuid4().hex}.jpg"
 
@@ -114,12 +113,4 @@ def capture_photo() -> CapturedPhoto:
 		output_path.unlink(missing_ok=True)
 		raise CameraCaptureError("The camera did not return a photo")
 
-	try:
-		encoded = base64.b64encode(output_path.read_bytes()).decode("ascii")
-	except OSError as error:
-		raise CameraCaptureError("The captured photo could not be read") from error
-
-	return CapturedPhoto(
-		image_data_url=f"data:image/jpeg;base64,{encoded}",
-		local_path=output_path.as_posix(),
-	)
+	return CapturedPhoto(local_path=output_path.as_posix())

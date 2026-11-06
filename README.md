@@ -129,8 +129,11 @@ The preview screen requests a fresh frame every 1.5 seconds through the API.
 Physical preview uses `gphoto2 --capture-preview`. Capture uses
 `gphoto2 --capture-image-and-download`, saves a UUID-named JPEG under
 `PHOTO_STORAGE_DIR` (default: `data/images`), and returns the image to the
-browser for review. The saved local path is returned as `local_path` and is
-stored in Neon with the capture session.
+browser as an HTTP URL for review. The API serves local captures at
+`/images/<filename>.jpg`. Set `PUBLIC_BASE_URL` to the Pi's LAN URL, such as
+`http://raspberrypi.local:8080`, so clients can retrieve the image. The saved
+local path is returned as `local_path` and is stored in Neon with the capture
+session.
 
 The camera adapter times out preview after 15 seconds and capture after 60
 seconds. A missing camera, failed command, timeout, or missing output file is
@@ -229,7 +232,7 @@ Captures and locally saves a photo, then returns:
 ```json
 {
 	"status": "captured",
-	"image_data_url": "data:image/jpeg;base64,...",
+	"image_url": "http://raspberrypi.local:8080/images/uuid.jpg",
 	"session_id": "uuid",
 	"local_path": "/path/to/project/data/images/uuid.jpg",
 	"remote_url": "https://images.example.com/sessions/uuid/uuid.jpg"
@@ -238,7 +241,7 @@ Captures and locally saves a photo, then returns:
 
 ### `POST /deliveries/email`
 
-Accepts `name`, `email`, `image_data_url`, and an optional `session_id`.
+Accepts `name`, `email`, `image_url`, and an optional `session_id`.
 Normal mode sends the image through Resend and returns the provider message ID.
 Development bypass mode returns `provider_id: "dev-bypass"` without sending.
 
@@ -249,8 +252,8 @@ This is an end-to-end booth prototype, not yet a production queueing system.
 - Capture creates a session per capture; a separate multi-capture session API is
 	not implemented.
 - Upload retry workers and offline delivery queues are not implemented.
-- Template email delivery depends on a publicly readable bucket URL; the
-	attachment-based fallback is used only when no Resend template is configured.
+- Email delivery includes the configured image URL so the recipient can open the
+	photo from the Pi or public image storage.
 - Neon connectivity is checked at API startup, so an unavailable Neon project
 	will prevent the API from starting when `NEON_DATABASE_URL` is configured.
 - Captured files remain on local disk indefinitely; there is no retention or

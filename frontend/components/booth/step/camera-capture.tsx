@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import Button from "@/components/button";
 
 interface CameraCaptureProps {
-    onCapture: (dataUrl: string, sessionId: string, remoteUrl: string | null) => void;
+    onCapture: (imageUrl: string, sessionId: string) => void;
     onCancel: () => void;
 }
 
@@ -48,7 +48,7 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
         setError(null)
         try {
             const capturedPhoto = await capturePhoto()
-            onCapture(capturedPhoto.imageDataUrl, capturedPhoto.sessionId, capturedPhoto.remoteUrl)
+            onCapture(capturedPhoto.imageUrl, capturedPhoto.sessionId)
         } catch (captureError) {
             setError(captureError instanceof Error ? captureError.message : 'The photo could not be captured')
         } finally {

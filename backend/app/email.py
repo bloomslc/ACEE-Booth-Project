@@ -1,5 +1,3 @@
-import base64
-import binascii
 import os
 from dataclasses import dataclass
 
@@ -14,7 +12,6 @@ class EmailDeliveryError(RuntimeError):
 class EmailDelivery:
 	recipient: str
 	guest_name: str
-	image_data_url: str | None = None
 	image_url: str | None = None
 	session_id: str | None = None
 
@@ -53,13 +50,6 @@ def send_photo_email(delivery: EmailDelivery) -> str:
 			}
 		)
 
-	if delivery.image_data_url and not template_id:
-		encoded_image = _data_url_to_base64(delivery.image_data_url)
-		payload["attachments"] = [{
-			"filename": "portrait-booth-photo.jpg",
-			"content": encoded_image,
-		}]
-
 	try:
 		response = httpx.post(
 			"https://api.resend.com/emails",
@@ -73,13 +63,3 @@ def send_photo_email(delivery: EmailDelivery) -> str:
 
 	return str(response.json().get("id", ""))
 
-
-def _data_url_to_base64(data_url: str) -> str:
-	try:
-		header, encoded = data_url.split(",", 1)
-		if not header.startswith("data:image/") or ";base64" not in header:
-			raise ValueError
-		base64.b64decode(encoded, validate=True)
-		return encoded
-	except (ValueError, binascii.Error) as error:
-		raise EmailDeliveryError("The photo must be a base64 image data URL") from error
