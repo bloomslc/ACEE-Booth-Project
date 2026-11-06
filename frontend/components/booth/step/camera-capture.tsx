@@ -15,21 +15,36 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
     const [preview, setPreview] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
     const hasPreview = useRef(false)
+    const isPreviewing = useRef(false)
+    const isCapturingRef = useRef(false)
+    const previewController = useRef<AbortController | null>(null)
 
     useEffect(() => {
         let isActive = true
 
         async function refreshPreview() {
+            if (isCapturingRef.current || isPreviewing.current) {
+                return
+            }
+
+            isPreviewing.current = true
+            const controller = new AbortController()
+            previewController.current = controller
             try {
-                const imageDataUrl = await previewPhoto()
+                const imageDataUrl = await previewPhoto(controller.signal)
                 if (isActive) {
                     setPreview(imageDataUrl)
                     hasPreview.current = true
                     setError(null)
                 }
             } catch (previewError) {
-                if (isActive && !hasPreview.current) {
+                if (isActive && !hasPreview.current && controller.signal.reason === undefined) {
                     setError(previewError instanceof Error ? previewError.message : 'The camera preview is unavailable')
+                }
+            } finally {
+                isPreviewing.current = false
+                if (previewController.current === controller) {
+                    previewController.current = null
                 }
             }
         }
@@ -39,11 +54,14 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
 
         return () => {
             isActive = false
+            previewController.current?.abort()
             window.clearInterval(interval)
         }
     }, [])
 
     async function handleCapture() {
+        isCapturingRef.current = true
+        previewController.current?.abort()
         setIsCapturing(true)
         setError(null)
         try {
@@ -52,6 +70,7 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
         } catch (captureError) {
             setError(captureError instanceof Error ? captureError.message : 'The photo could not be captured')
         } finally {
+            isCapturingRef.current = false
             setIsCapturing(false)
         }
     }

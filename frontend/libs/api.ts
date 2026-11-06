@@ -9,12 +9,12 @@ type CapturedPhoto = {
   remoteUrl: string | null
 }
 
-export async function previewPhoto(): Promise<string> {
+export async function previewPhoto(signal?: AbortSignal): Promise<string> {
   if (frontendDevBypass) {
     return '/image.jpg'
   }
 
-  const response = await fetch(`${apiUrl}/api/v1/camera/preview`, { method: 'POST' })
+  const response = await fetch(`${apiUrl}/api/v1/camera/preview`, { method: 'POST', signal })
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
@@ -26,8 +26,8 @@ export async function previewPhoto(): Promise<string> {
 
 export async function capturePhoto(): Promise<CapturedPhoto> {
   if (frontendDevBypass) {
-    return {
-		imageUrl: '/image.jpg',
+      return {
+  		imageUrl: '/image.jpg',
       sessionId: crypto.randomUUID(),
       remoteUrl: null,
     }
@@ -38,6 +38,10 @@ export async function capturePhoto(): Promise<CapturedPhoto> {
 
   if (!response.ok) {
     throw new Error(body?.detail ?? 'The photo could not be captured')
+  }
+
+  if (typeof body?.image_url !== 'string' || typeof body?.session_id !== 'string') {
+    throw new Error('The camera returned an invalid capture response')
   }
 
   return {

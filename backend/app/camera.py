@@ -2,6 +2,7 @@ import base64
 import os
 import subprocess
 import tempfile
+from threading import Lock
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -17,6 +18,7 @@ class CapturedPhoto:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+CAMERA_LOCK = Lock()
 
 
 def _project_path(environment_name: str, default: str) -> Path:
@@ -56,18 +58,19 @@ def capture_preview() -> str:
 
 	preview_path = Path(tempfile.gettempdir()) / f"portrait-booth-preview-{uuid4().hex}.jpg"
 	try:
-		result = subprocess.run(
-			[
-				"gphoto2",
-				"--capture-preview",
-				"--filename",
-				str(preview_path),
-				"--force-overwrite",
-			],
-			capture_output=True,
-			text=True,
-			timeout=15,
-		)
+		with CAMERA_LOCK:
+			result = subprocess.run(
+				[
+					"gphoto2",
+					"--capture-preview",
+					"--filename",
+					str(preview_path),
+					"--force-overwrite",
+				],
+				capture_output=True,
+				text=True,
+				timeout=15,
+			)
 	except (FileNotFoundError, subprocess.TimeoutExpired) as error:
 		raise CameraCaptureError("gphoto2 could not read the camera preview") from error
 
@@ -94,18 +97,19 @@ def capture_photo() -> CapturedPhoto:
 	output_path = output_dir / f"{uuid4().hex}.jpg"
 
 	try:
-		result = subprocess.run(
-			[
-				"gphoto2",
-				"--capture-image-and-download",
-				"--filename",
-				str(output_path),
-				"--force-overwrite",
-			],
-			capture_output=True,
-			text=True,
-			timeout=60,
-		)
+		with CAMERA_LOCK:
+			result = subprocess.run(
+				[
+					"gphoto2",
+					"--capture-image-and-download",
+					"--filename",
+					str(output_path),
+					"--force-overwrite",
+				],
+				capture_output=True,
+				text=True,
+				timeout=60,
+			)
 	except (FileNotFoundError, subprocess.TimeoutExpired) as error:
 		raise CameraCaptureError("gphoto2 could not capture a photo") from error
 
