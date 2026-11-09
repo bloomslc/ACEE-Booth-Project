@@ -1,7 +1,6 @@
-import base64
 import os
 import subprocess
-import tempfile
+import time
 from threading import Lock
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,41 +52,45 @@ def _bypass_image_bytes() -> bytes | None:
 		raise CameraCaptureError(f"The bypass image could not be read: {image_path}") from error
 
 
-def capture_preview() -> str:
-	"""Capture a temporary preview frame without adding it to photo storage."""
+def capture_preview_frame() -> bytes:
+	"""Capture one temporary preview JPEG without adding it to photo storage."""
 	bypass_image = _bypass_image_bytes()
 	if bypass_image:
-		encoded = base64.b64encode(bypass_image).decode("ascii")
-		return f"data:image/jpeg;base64,{encoded}"
+		return bypass_image
 
-	preview_path = Path(tempfile.gettempdir()) / f"portrait-booth-preview-{uuid4().hex}.jpg"
 	try:
 		with CAMERA_LOCK:
 			result = subprocess.run(
 				[
 					"gphoto2",
 					"--capture-preview",
-					"--filename",
-					str(preview_path),
-					"--force-overwrite",
+					"--stdout",
 				],
 				capture_output=True,
-				text=True,
 				timeout=15,
 			)
 	except (FileNotFoundError, subprocess.TimeoutExpired) as error:
 		raise CameraCaptureError("gphoto2 could not read the camera preview") from error
 
-	try:
-		if result.returncode != 0 or not preview_path.is_file():
-			raise CameraCaptureError("The camera preview is unavailable")
-		encoded = base64.b64encode(preview_path.read_bytes()).decode("ascii")
-	except OSError as error:
-		raise CameraCaptureError("The camera preview could not be read") from error
-	finally:
-		preview_path.unlink(missing_ok=True)
+	if result.returncode != 0 or not result.stdout:
+		raise CameraCaptureError("The camera preview is unavailable")
 
-	return f"data:image/jpeg;base64,{encoded}"
+	return result.stdout
+
+
+def preview_stream(first_frame: bytes):
+	"""Yield JPEG preview frames until the browser closes the stream."""
+	frame = first_frame
+	while True:
+		yield (
+			b"--frame\r\n"
+			b"Content-Type: image/jpeg\r\n"
+			+ f"Content-Length: {len(frame)}\r\n\r\n".encode("ascii")
+			+ frame
+			+ b"\r\n"
+		)
+		time.sleep(0.1)
+		frame = capture_preview_frame()
 
 
 def capture_photo() -> CapturedPhoto:

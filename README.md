@@ -220,10 +220,11 @@ All routes use the `/api/v1` prefix.
 
 Returns application, email provider, and database status.
 
-### `POST /camera/preview`
+### `GET /camera/preview`
 
-Returns a temporary preview as a base64 image data URL. It does not save a
-photo. Camera errors return `503`.
+Returns a continuous multipart JPEG preview stream using
+`gphoto2 --capture-preview --stdout`. It does not save a photo. The browser
+closes this request before starting a capture. Camera errors return `503`.
 
 ### `POST /capture`
 

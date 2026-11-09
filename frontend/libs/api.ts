@@ -9,19 +9,8 @@ type CapturedPhoto = {
   remoteUrl: string | null
 }
 
-export async function previewPhoto(signal?: AbortSignal): Promise<string> {
-  if (frontendDevBypass) {
-    return '/image.jpg'
-  }
-
-  const response = await fetch(`${apiUrl}/api/v1/camera/preview`, { method: 'POST', signal })
-  const body = await response.json().catch(() => null)
-
-  if (!response.ok) {
-    throw new Error(body?.detail ?? 'The camera preview is unavailable')
-  }
-
-  return body.image_data_url
+export function previewStreamUrl(): string {
+  return frontendDevBypass ? '/image.jpg' : `${apiUrl}/api/v1/camera/preview`
 }
 
 export async function capturePhoto(): Promise<CapturedPhoto> {

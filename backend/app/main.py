@@ -4,12 +4,12 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 from dotenv import load_dotenv
 
-from .camera import CameraCaptureError, bypass_image_path, capture_photo, capture_preview, is_dev_bypass, photo_storage_dir
+from .camera import CameraCaptureError, bypass_image_path, capture_photo, capture_preview_frame, is_dev_bypass, photo_storage_dir, preview_stream
 from .database import DatabaseError, create_session, initialize, is_configured, record_delivery, record_photo
 from .email import EmailDelivery, EmailDeliveryError, send_photo_email
 from .storage import ImageStorageError, upload_image
@@ -35,11 +35,6 @@ class CaptureResponse(BaseModel):
 	session_id: str
 	local_path: str | None
 	remote_url: str | None
-
-
-class PreviewResponse(BaseModel):
-	status: str
-	image_data_url: str
 
 
 app = FastAPI(title="ACEE Portrait Booth API")
@@ -110,14 +105,18 @@ def capture(request: Request) -> CaptureResponse:
 	)
 
 
-@app.post("/api/v1/camera/preview", response_model=PreviewResponse)
-def preview() -> PreviewResponse:
+@app.get("/api/v1/camera/preview")
+def preview() -> StreamingResponse:
 	try:
-		image_data_url = capture_preview()
+		first_frame = capture_preview_frame()
 	except CameraCaptureError as error:
 		raise HTTPException(status_code=503, detail=str(error)) from error
 
-	return PreviewResponse(status="preview", image_data_url=image_data_url)
+	return StreamingResponse(
+		preview_stream(first_frame),
+		media_type="multipart/x-mixed-replace; boundary=frame",
+		headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+	)
 
 
 @app.post("/api/v1/deliveries/email", response_model=EmailDeliveryResponse)

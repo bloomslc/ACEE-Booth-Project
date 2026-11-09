@@ -1,8 +1,8 @@
 import { ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import BoothStructure, { BoothStructureContent, BoothStructureAction } from "../booth-structure";
-import { capturePhoto, previewPhoto } from "@/libs/api";
-import { useEffect, useRef, useState } from "react";
+import { capturePhoto, previewStreamUrl } from "@/libs/api";
+import { useState } from "react";
 import Button from "@/components/button";
 
 interface CameraCaptureProps {
@@ -12,65 +12,21 @@ interface CameraCaptureProps {
 
 export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
     const [isCapturing, setIsCapturing] = useState(false)
-    const [preview, setPreview] = useState<string | null>(null)
+    const [isPreviewEnabled, setIsPreviewEnabled] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const hasPreview = useRef(false)
-    const isPreviewing = useRef(false)
-    const isCapturingRef = useRef(false)
-    const previewController = useRef<AbortController | null>(null)
-
-    useEffect(() => {
-        let isActive = true
-
-        async function refreshPreview() {
-            if (isCapturingRef.current || isPreviewing.current) {
-                return
-            }
-
-            isPreviewing.current = true
-            const controller = new AbortController()
-            previewController.current = controller
-            try {
-                const imageDataUrl = await previewPhoto(controller.signal)
-                if (isActive) {
-                    setPreview(imageDataUrl)
-                    hasPreview.current = true
-                    setError(null)
-                }
-            } catch (previewError) {
-                if (isActive && !hasPreview.current && controller.signal.reason === undefined) {
-                    setError(previewError instanceof Error ? previewError.message : 'The camera preview is unavailable')
-                }
-            } finally {
-                isPreviewing.current = false
-                if (previewController.current === controller) {
-                    previewController.current = null
-                }
-            }
-        }
-
-        void refreshPreview()
-        const interval = window.setInterval(() => void refreshPreview(), 1500)
-
-        return () => {
-            isActive = false
-            previewController.current?.abort()
-            window.clearInterval(interval)
-        }
-    }, [])
 
     async function handleCapture() {
-        isCapturingRef.current = true
-        previewController.current?.abort()
+        setIsPreviewEnabled(false)
         setIsCapturing(true)
         setError(null)
         try {
+            await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
             const capturedPhoto = await capturePhoto()
             onCapture(capturedPhoto.imageUrl, capturedPhoto.sessionId)
         } catch (captureError) {
+            setIsPreviewEnabled(true)
             setError(captureError instanceof Error ? captureError.message : 'The photo could not be captured')
         } finally {
-            isCapturingRef.current = false
             setIsCapturing(false)
         }
     }
@@ -80,7 +36,19 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
             <BoothStructureContent>
                 <div className="grid min-h-0 w-full flex-1 place-items-center overflow-hidden">
                     <div className="aspect-2/3 h-full min-h-0 min-w-0 max-h-full w-auto max-w-full rounded-4xl bg-black">
-                        <Image src={preview ?? "/image.jpg"} width={500} height={750} alt="Camera preview" className="w-full h-full object-contain rounded-4xl" />
+                        {isPreviewEnabled ? (
+                            <Image
+                                src={previewStreamUrl()}
+                                width={500}
+                                height={750}
+                                alt="Camera preview"
+                                unoptimized
+                                onError={() => setError('The camera preview is unavailable')}
+                                className="w-full h-full object-contain rounded-4xl"
+                            />
+                        ) : (
+                            <div className="h-full w-full" aria-hidden="true" />
+                        )}
                     </div>
                     {error && <p className="absolute bottom-4 max-w-sm text-center text-red-600">{error}</p>}
                 </div>
