@@ -18,7 +18,7 @@ export default function BoothStructure({ children }: BoothStructureProps) {
     return (
         <section className="grid h-full w-full max-w-full grid-rows-[1fr_7fr] overflow-hidden px-[5%] py-[4%] lg:aspect-1488/2266 lg:w-auto lg:border">
             <BoothHeader />
-            <div className="h-full w-full grid grid-rows-[6fr_1fr] bg-foreground gap-4 rounded-4xl overflow-hidden">
+            <div className="h-full w-full grid grid-rows-[6fr_1fr] bg-foreground rounded-4xl overflow-hidden">
                 {children}
             </div>
         </section>
@@ -27,7 +27,7 @@ export default function BoothStructure({ children }: BoothStructureProps) {
 
 export function BoothStructureContent({ children }: BoothStructureContentProps) {
     return (
-        <div className={`flex flex-col h-full min-h-0 flex-1 p-4`}>
+        <div className={`flex flex-col h-full min-h-0 flex-1 p-4 pb-0`}>
             {children}
         </div>
     );

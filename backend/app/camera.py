@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
+from PIL import Image
+
 
 class CameraCaptureError(RuntimeError):
 	"""Raised when the connected camera cannot capture an image."""
@@ -31,6 +33,10 @@ def photo_storage_dir() -> Path:
 
 def bypass_image_path() -> Path:
 	return _project_path("DEV_BYPASS_IMAGE", "frontend/public/image.jpg")
+
+
+def watermark_image_path() -> Path:
+	return _project_path("WATERMARK_IMAGE_PATH", "backend/watermark.png")
 
 
 def is_dev_bypass() -> bool:
@@ -93,6 +99,30 @@ def preview_stream(first_frame: bytes):
 		frame = capture_preview_frame()
 
 
+def add_watermark(image_path: Path) -> None:
+	try:
+		with Image.open(image_path) as source:
+			image = source.convert("RGBA")
+			with Image.open(watermark_image_path()) as watermark_source:
+				watermark = watermark_source.convert("RGBA")
+				watermark_width = max(1, image.width // 6)
+				watermark_height = max(1, round(watermark.height * watermark_width / watermark.width))
+				watermark = watermark.resize(
+					(watermark_width, watermark_height),
+					Image.Resampling.LANCZOS,
+				)
+
+			padding = max(12, image.width // 50)
+			position = (
+				image.width - watermark.width - padding,
+				image.height - watermark.height - padding,
+			)
+			image.alpha_composite(watermark, position)
+			image.convert("RGB").save(image_path, "JPEG", quality=95, optimize=True)
+	except (OSError, ValueError) as error:
+		raise CameraCaptureError("The captured photo could not be watermarked") from error
+
+
 def capture_photo() -> CapturedPhoto:
 	"""Capture and persist a JPEG, returning its local path."""
 	bypass_image = _bypass_image_bytes()
@@ -123,5 +153,11 @@ def capture_photo() -> CapturedPhoto:
 	if result.returncode != 0 or not output_path.is_file():
 		output_path.unlink(missing_ok=True)
 		raise CameraCaptureError("The camera did not return a photo")
+
+	try:
+		add_watermark(output_path)
+	except CameraCaptureError:
+		output_path.unlink(missing_ok=True)
+		raise
 
 	return CapturedPhoto(local_path=output_path.as_posix())

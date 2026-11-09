@@ -34,8 +34,8 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
     return (
         <BoothStructure>
             <BoothStructureContent>
-                <div className="grid min-h-0 w-full flex-1 place-items-center overflow-hidden">
-                    <div className="aspect-2/3 h-full min-h-0 min-w-0 max-h-full w-auto max-w-full rounded-4xl bg-black">
+                <div className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden rounded-3xl border border-[#dbe7f2] bg-[#f7faff] p-4 shadow-[0_18px_50px_rgba(26,54,102,0.10)]">
+                    <div className="aspect-2/3 h-full min-h-0 min-w-0 max-h-full w-auto max-w-full overflow-hidden rounded-2xl bg-black shadow-inner">
                         {isPreviewEnabled ? (
                             <Image
                                 src={previewStreamUrl()}

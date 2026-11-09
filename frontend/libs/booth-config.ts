@@ -1,10 +1,11 @@
 export const boothConfig = {
-  eventName: 'ACEE Booth Project',
+  eventName: 'ACEE Photo Booth',
   countdownSeconds: 3,
-  autoResetSeconds: 8,
   links: [
-    { label: 'Visit our website', href: 'https://slc.qc.ca/bloom' },
-    { label: 'See the gallery', href: 'https://slc.qc.ca/bloom/gallery' },
+    { title: 'Bloom', type: 'bloom' as const, href: 'https://slc.qc.ca/bloom' },
+    { title: 'LinkedIn', type: 'linkedin' as const, href: 'https://www.linkedin.com/company/slcbloom/' },
+    { title: 'Instagram', type: 'instagram' as const, href: 'https://www.instagram.com/slcbloom/' },
+    { title: 'Facebook', type: 'facebook' as const, href: 'https://www.facebook.com/slcbloom/' },
   ],
 } as const
 

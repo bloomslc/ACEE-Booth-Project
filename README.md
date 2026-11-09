@@ -133,7 +133,9 @@ browser as an HTTP URL for review. The API serves local captures at
 `/images/<filename>.jpg`. Set `PUBLIC_BASE_URL` to the Pi's LAN URL, such as
 `http://raspberrypi.local:8080`, so clients can retrieve the image. The saved
 local path is returned as `local_path` and is stored in Neon with the capture
-session.
+session. Captured JPEGs receive the lower-right `backend/watermark.png`
+watermark before they are stored or uploaded. Set `WATERMARK_IMAGE_PATH` to
+use a different PNG watermark.
 
 The camera adapter times out preview after 15 seconds and capture after 60
 seconds. A missing camera, failed command, timeout, or missing output file is
