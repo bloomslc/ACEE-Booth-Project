@@ -88,10 +88,13 @@ def capture(request: Request) -> CaptureResponse:
 		except DatabaseError as error:
 			raise HTTPException(status_code=503, detail=str(error)) from error
 
-	image_url = remote_url
+	image_url = remote_url if os.getenv("S3_PUBLIC_BASE_URL") else None
 	if captured_photo.local_path and not image_url:
 		filename = Path(captured_photo.local_path).name
-		public_base_url = os.getenv("PUBLIC_BASE_URL", str(request.base_url).rstrip("/"))
+		configured_base_url = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+		public_base_url = configured_base_url or str(request.base_url).rstrip("/")
+		if "0.0.0.0" in public_base_url:
+			public_base_url = str(request.base_url).rstrip("/")
 		image_url = f"{public_base_url.rstrip('/')}/images/{filename}"
 	if not image_url:
 		image_url = f"{str(request.base_url).rstrip('/')}/api/v1/dev-bypass-image"

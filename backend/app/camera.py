@@ -20,6 +20,8 @@ class CapturedPhoto:
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CAMERA_LOCK = Lock()
+PREVIEW_PROCESS_LOCK = Lock()
+ACTIVE_PREVIEW_PROCESS = None
 
 
 def _project_path(environment_name: str, default: str) -> Path:
@@ -58,30 +60,59 @@ def _bypass_image_bytes() -> bytes | None:
 		raise CameraCaptureError(f"The bypass image could not be read: {image_path}") from error
 
 
+def stop_preview_capture() -> None:
+	global ACTIVE_PREVIEW_PROCESS
+	with PREVIEW_PROCESS_LOCK:
+		process = ACTIVE_PREVIEW_PROCESS
+
+	if process is None or process.poll() is not None:
+		return
+
+	process.terminate()
+	try:
+		process.wait(timeout=1)
+	except subprocess.TimeoutExpired:
+		process.kill()
+		process.wait()
+
+
 def capture_preview_frame() -> bytes:
 	"""Capture one temporary preview JPEG without adding it to photo storage."""
 	bypass_image = _bypass_image_bytes()
 	if bypass_image:
 		return bypass_image
 
+	global ACTIVE_PREVIEW_PROCESS
+	process = None
 	try:
 		with CAMERA_LOCK:
-			result = subprocess.run(
+			process = subprocess.Popen(
 				[
 					"gphoto2",
 					"--capture-preview",
 					"--stdout",
 				],
-				capture_output=True,
-				timeout=15,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE,
 			)
+			with PREVIEW_PROCESS_LOCK:
+				ACTIVE_PREVIEW_PROCESS = process
+			stdout, _ = process.communicate(timeout=15)
+			result_code = process.returncode
 	except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+		if process is not None and process.poll() is None:
+			process.kill()
+			process.wait()
 		raise CameraCaptureError("gphoto2 could not read the camera preview") from error
+	finally:
+		with PREVIEW_PROCESS_LOCK:
+			if ACTIVE_PREVIEW_PROCESS is process:
+				ACTIVE_PREVIEW_PROCESS = None
 
-	if result.returncode != 0 or not result.stdout:
+	if result_code != 0 or not stdout:
 		raise CameraCaptureError("The camera preview is unavailable")
 
-	return result.stdout
+	return stdout
 
 
 def preview_stream(first_frame: bytes):
@@ -125,6 +156,7 @@ def add_watermark(image_path: Path) -> None:
 
 def capture_photo() -> CapturedPhoto:
 	"""Capture and persist a JPEG, returning its local path."""
+	stop_preview_capture()
 	bypass_image = _bypass_image_bytes()
 	if bypass_image:
 		return CapturedPhoto(local_path=None)
