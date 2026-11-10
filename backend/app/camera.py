@@ -148,7 +148,7 @@ def add_watermark(image_path: Path) -> None:
 				image = image.rotate(90, expand=True)
 			with Image.open(watermark_image_path()) as watermark_source:
 				watermark = watermark_source.convert("RGBA")
-				watermark_width = max(1, image.width // 6)
+				watermark_width = max(1, image.width // 4)
 				watermark_height = max(1, round(watermark.height * watermark_width / watermark.width))
 				watermark = watermark.resize(
 					(watermark_width, watermark_height),
@@ -156,10 +156,7 @@ def add_watermark(image_path: Path) -> None:
 				)
 
 			padding = max(12, image.width // 50)
-			position = (
-				image.width - watermark.width - padding,
-				image.height - watermark.height - padding,
-			)
+			position = (padding, image.height - watermark.height - padding)
 			image.alpha_composite(watermark, position)
 			image.convert("RGB").save(image_path, "JPEG", quality=95, optimize=True)
 	except (OSError, ValueError) as error:
