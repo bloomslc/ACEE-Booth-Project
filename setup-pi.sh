@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 REPO_URL="https://github.com/bloomslc/ACEE-Booth-Project.git"
 INSTALL_DIR="${1:-$HOME/ACEE-Booth-Project}"
+ENV_DIR="${ENV_DIR:-/home/bloomslc/env}"
 INSTALL_DIR="$(mkdir -p "$(dirname "$INSTALL_DIR")" && cd "$(dirname "$INSTALL_DIR")" && pwd)/$(basename "$INSTALL_DIR")"
 
 require_command() {
@@ -30,6 +31,20 @@ ensure_bun() {
 	require_command bun
 }
 
+copy_environment_files() {
+	if [[ ! -f "$ENV_DIR/.env.frontend" || ! -f "$ENV_DIR/.env.backend" ]]; then
+		echo "Error: expected environment files in $ENV_DIR:" >&2
+		echo "  $ENV_DIR/.env.frontend" >&2
+		echo "  $ENV_DIR/.env.backend" >&2
+		return 1
+	fi
+
+	echo "Copying frontend environment: $ENV_DIR/.env.frontend"
+	cp "$ENV_DIR/.env.frontend" "$INSTALL_DIR/frontend/.env"
+	echo "Copying backend environment: $ENV_DIR/.env.backend"
+	cp "$ENV_DIR/.env.backend" "$INSTALL_DIR/backend/.env"
+}
+
 setup_project() {
 	ensure_bun
 	if [[ -d "$INSTALL_DIR/.git" ]]; then
@@ -44,6 +59,7 @@ setup_project() {
 	fi
 
 	cd "$INSTALL_DIR"
+	copy_environment_files
 
 	if [[ ! -d .venv ]]; then
 		echo "Creating Python virtual environment"
@@ -103,7 +119,7 @@ run_project() {
 		return 1
 	fi
 
-	local backend_command=".venv/bin/uvicorn app.main:app --host 10.1.87.223 --port 8080 --app-dir backend"
+	local backend_command=".venv/bin/uvicorn app.main:app --host 10.1.87.237 --port 8080 --app-dir backend"
 	local frontend_command="cd frontend && bun start"
 	if ! run_in_terminal "ACEE backend" "$backend_command" || ! run_in_terminal "ACEE frontend" "$frontend_command"; then
 		echo "No supported terminal emulator was found. Run these commands in two terminals:"

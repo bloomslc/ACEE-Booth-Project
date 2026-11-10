@@ -1,8 +1,11 @@
 import os
+import logging
 from dataclasses import dataclass
 from email.utils import parseaddr
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class EmailDeliveryError(RuntimeError):
@@ -58,6 +61,12 @@ def send_photo_email(delivery: EmailDelivery) -> str:
 		)
 
 	try:
+		logger.info(
+			"Sending email through Resend recipient=%s template=%s image_url_present=%s",
+			delivery.recipient,
+			bool(template_id),
+			bool(delivery.image_url),
+		)
 		response = httpx.post(
 			"https://api.resend.com/emails",
 			headers={"Authorization": f"Bearer {api_key}"},
@@ -65,6 +74,7 @@ def send_photo_email(delivery: EmailDelivery) -> str:
 			timeout=20,
 		)
 		response.raise_for_status()
+		logger.info("Resend accepted email recipient=%s provider_id=%s", delivery.recipient, response.json().get("id", ""))
 	except httpx.HTTPStatusError as error:
 		detail = error.response.text[:500]
 		raise EmailDeliveryError(f"Resend rejected the email: {detail}") from error

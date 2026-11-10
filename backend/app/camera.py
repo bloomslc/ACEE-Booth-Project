@@ -1,4 +1,5 @@
 import os
+import logging
 import subprocess
 import time
 from threading import Lock
@@ -7,6 +8,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 class CameraCaptureError(RuntimeError):
@@ -42,11 +45,14 @@ def watermark_image_path() -> Path:
 
 
 def is_dev_bypass() -> bool:
-	return os.getenv("DEV_BYPASS", "false").lower() in {
+	configured_value = os.getenv("DEV_BYPASS", "false")
+	is_enabled = configured_value.lower() in {
 		"1",
 		"true",
 		"yes",
 	}
+	logger.info("Camera development bypass=%s configured_value=%s", is_enabled, configured_value)
+	return is_enabled
 
 
 def _bypass_image_bytes() -> bytes | None:
@@ -68,10 +74,12 @@ def stop_preview_capture() -> None:
 	if process is None or process.poll() is not None:
 		return
 
+	logger.info("Stopping active camera preview process pid=%s", process.pid)
 	process.terminate()
 	try:
 		process.wait(timeout=1)
 	except subprocess.TimeoutExpired:
+		logger.warning("Camera preview process did not stop gracefully; killing pid=%s", process.pid)
 		process.kill()
 		process.wait()
 
@@ -100,6 +108,7 @@ def capture_preview_frame() -> bytes:
 			stdout, _ = process.communicate(timeout=15)
 			result_code = process.returncode
 	except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+		logger.exception("gphoto2 preview command failed")
 		if process is not None and process.poll() is None:
 			process.kill()
 			process.wait()
@@ -110,6 +119,7 @@ def capture_preview_frame() -> bytes:
 				ACTIVE_PREVIEW_PROCESS = None
 
 	if result_code != 0 or not stdout:
+		logger.error("gphoto2 preview returned code=%s output_present=%s", result_code, bool(stdout))
 		raise CameraCaptureError("The camera preview is unavailable")
 
 	return stdout
@@ -151,14 +161,17 @@ def add_watermark(image_path: Path) -> None:
 			image.alpha_composite(watermark, position)
 			image.convert("RGB").save(image_path, "JPEG", quality=95, optimize=True)
 	except (OSError, ValueError) as error:
+		logger.exception("Watermarking failed for image path=%s", image_path)
 		raise CameraCaptureError("The captured photo could not be watermarked") from error
 
 
 def capture_photo() -> CapturedPhoto:
 	"""Capture and persist a JPEG, returning its local path."""
+	logger.info("Starting camera capture dev_bypass=%s", is_dev_bypass())
 	stop_preview_capture()
 	bypass_image = _bypass_image_bytes()
 	if bypass_image:
+		logger.info("Using development bypass image path=%s", bypass_image_path())
 		return CapturedPhoto(local_path=None)
 
 	output_dir = photo_storage_dir()
@@ -179,12 +192,26 @@ def capture_photo() -> CapturedPhoto:
 				text=True,
 				timeout=60,
 			)
-	except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+	except FileNotFoundError as error:
+		logger.exception("gphoto2 was not found while capturing image")
+		raise CameraCaptureError("gphoto2 is not installed or not available on PATH") from error
+	except subprocess.TimeoutExpired as error:
+		logger.exception("gphoto2 capture timed out after 60 seconds")
 		raise CameraCaptureError("gphoto2 could not capture a photo") from error
 
 	if result.returncode != 0 or not output_path.is_file():
+		stderr = (result.stderr or "").strip()
+		stdout = (result.stdout or "").strip()
+		logger.error(
+			"gphoto2 capture failed returncode=%s output_path=%s stderr=%s stdout=%s",
+			result.returncode,
+			output_path,
+			stderr[-1000:],
+			stdout[-1000:],
+		)
 		output_path.unlink(missing_ok=True)
-		raise CameraCaptureError("The camera did not return a photo")
+		detail = stderr or stdout or "no gphoto2 diagnostics"
+		raise CameraCaptureError(f"The camera did not return a photo: {detail[-500:]}")
 
 	try:
 		add_watermark(output_path)

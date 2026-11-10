@@ -46,9 +46,11 @@ export async function sendPhotoByEmail(
   sessionId: string | null,
 ): Promise<void> {
   if (frontendDevBypass) {
+    console.warn('[email] skipped because NEXT_PUBLIC_DEV_BYPASS is enabled in the frontend build')
     return
   }
 
+  console.info('[email] sending delivery request', { apiUrl, sessionId, hasImageUrl: Boolean(imageUrl) })
   const response = await fetch(`${apiUrl}/api/v1/deliveries/email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -62,6 +64,9 @@ export async function sendPhotoByEmail(
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
+    console.error('[email] delivery request failed', response.status, error)
     throw new Error(error?.detail ?? 'The photo could not be sent')
   }
+
+  console.info('[email] delivery request accepted')
 }

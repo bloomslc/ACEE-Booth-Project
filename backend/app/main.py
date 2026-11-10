@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,6 +16,8 @@ from .email import EmailDelivery, EmailDeliveryError, send_photo_email
 from .storage import ImageStorageError, upload_image
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+logger = logging.getLogger(__name__)
 
 
 class EmailDeliveryRequest(BaseModel):
@@ -56,7 +59,13 @@ def startup() -> None:
 
 @app.get("/api/v1/health")
 def health() -> dict[str, str]:
-	return {"status": "ok", "email_provider": "resend", "database": "neon" if is_configured() else "disabled"}
+	return {
+		"status": "ok",
+		"email_provider": "resend",
+		"database": "neon" if is_configured() else "disabled",
+		"dev_bypass": "enabled" if is_dev_bypass() else "disabled",
+		"image_storage": "s3" if os.getenv("S3_BUCKET") and not is_dev_bypass() else "local",
+	}
 
 
 @app.get("/api/v1/dev-bypass-image")
@@ -72,23 +81,34 @@ def capture(request: Request) -> CaptureResponse:
 		captured_photo = capture_photo()
 	except CameraCaptureError as error:
 		raise HTTPException(status_code=503, detail=str(error)) from error
+	logger.info(
+		"Capture completed local_path_present=%s dev_bypass=%s s3_configured=%s database_configured=%s",
+		bool(captured_photo.local_path),
+		is_dev_bypass(),
+		bool(os.getenv("S3_BUCKET")),
+		is_configured(),
+	)
 
 	session_id = str(uuid4())
 	remote_url = None
 	if captured_photo.local_path and not is_dev_bypass() and os.getenv("S3_BUCKET"):
 		try:
 			remote_url = upload_image(captured_photo.local_path, session_id)
+			logger.info("Capture uploaded to image storage session_id=%s", session_id)
 		except ImageStorageError as error:
+			logger.exception("Capture upload failed session_id=%s", session_id)
 			raise HTTPException(status_code=502, detail=str(error)) from error
 
 	if is_configured() and captured_photo.local_path:
 		try:
 			create_session(session_id)
 			record_photo(session_id, captured_photo.local_path, remote_url)
+			logger.info("Capture recorded in database session_id=%s", session_id)
 		except DatabaseError as error:
+			logger.exception("Capture database record failed session_id=%s", session_id)
 			raise HTTPException(status_code=503, detail=str(error)) from error
 
-	image_url = remote_url if os.getenv("S3_PUBLIC_BASE_URL") else None
+	image_url = remote_url
 	if captured_photo.local_path and not image_url:
 		filename = Path(captured_photo.local_path).name
 		configured_base_url = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
@@ -124,7 +144,15 @@ def preview() -> StreamingResponse:
 
 @app.post("/api/v1/deliveries/email", response_model=EmailDeliveryResponse)
 def deliver_email(request: EmailDeliveryRequest) -> EmailDeliveryResponse:
+	logger.info(
+		"Email delivery requested recipient=%s session_id=%s image_url_present=%s dev_bypass=%s",
+		request.email,
+		request.session_id,
+		bool(request.image_url),
+		is_dev_bypass(),
+	)
 	if is_dev_bypass():
+		logger.warning("Email delivery skipped because DEV_BYPASS is enabled")
 		provider_id = "dev-bypass"
 		status = "skipped"
 	else:
