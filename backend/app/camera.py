@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,9 @@ def preview_stream(first_frame: bytes):
 def add_watermark(image_path: Path) -> None:
 	try:
 		with Image.open(image_path) as source:
-			image = source.convert("RGBA")
+			image = ImageOps.exif_transpose(source).convert("RGBA")
+			if image.width > image.height:
+				image = image.rotate(90, expand=True)
 			with Image.open(watermark_image_path()) as watermark_source:
 				watermark = watermark_source.convert("RGBA")
 				watermark_width = max(1, image.width // 6)
