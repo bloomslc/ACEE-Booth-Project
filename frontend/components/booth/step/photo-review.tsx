@@ -16,7 +16,7 @@ export default function PhotoReview({ onAccept, onCancel, onRetake, photo }: Pho
             <BoothStructureContent>
                 <div className="grid grid-rows-[4fr_1fr] gap-4 w-full max-h-full max-w-full overflow-hidden">
                     <div className="aspect-2/3 bg-white rounded-3xl relative h-full w-auto overflow-hidden">
-                        <Image src={photo} width={100} height={100} alt="Captured" className="w-full h-full object-contain rounded-3xl" />
+                        <Image src={photo} width={100} height={100} unoptimized alt="Captured" className="w-full h-full object-contain rounded-3xl" />
                     </div>
                     <div className="flex h-full flex-col justify-center gap-2 rounded-3xl border border-[#dbe7f2] bg-white px-6 text-text shadow-[0_18px_50px_rgba(26,54,102,0.10)]">
                         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Looking good!</h1>

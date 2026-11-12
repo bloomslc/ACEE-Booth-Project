@@ -119,8 +119,13 @@ run_project() {
 		return 1
 	fi
 
-	local backend_command=".venv/bin/uvicorn app.main:app --host 10.1.87.237 --port 8080 --app-dir backend"
-	local frontend_command="cd frontend && bun start"
+	# New terminals run `bash -lc`, which does not read ~/.bashrc where the Bun installer adds
+	# its PATH entry, so pass Bun's absolute path instead of relying on PATH.
+	local bun_path
+	bun_path="$(command -v bun)"
+
+	local backend_command=".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 --app-dir backend"
+	local frontend_command="cd frontend && \"$bun_path\" start"
 	if ! run_in_terminal "ACEE backend" "$backend_command" || ! run_in_terminal "ACEE frontend" "$frontend_command"; then
 		echo "No supported terminal emulator was found. Run these commands in two terminals:"
 		echo "  cd $INSTALL_DIR && $backend_command"

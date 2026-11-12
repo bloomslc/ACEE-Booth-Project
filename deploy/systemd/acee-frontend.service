@@ -1,0 +1,15 @@
+[Unit]
+Description=ACEE Portrait Booth frontend
+After=network-online.target acee-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bloomslc
+WorkingDirectory=/home/bloomslc/ACEE-Booth-Project/frontend
+ExecStart=/home/bloomslc/.bun/bin/bun run start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

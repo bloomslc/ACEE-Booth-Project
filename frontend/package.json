@@ -10,12 +10,10 @@
   },
   "dependencies": {
     "@lglab/react-qr-code": "^1.8.1",
-    "@vercel/global-config": "^1.5.1",
     "lucide-react": "^1.60.0",
     "next": "16.4.3",
     "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "vercel": "^65.4.0"
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",

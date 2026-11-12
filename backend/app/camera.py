@@ -1,13 +1,16 @@
-import os
 import logging
+import signal
 import subprocess
 import time
-from threading import Lock
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Condition, Lock, Thread
 from uuid import uuid4
 
 from PIL import Image, ImageOps
+
+from .config import is_dev_bypass, project_path
 
 logger = logging.getLogger(__name__)
 
@@ -21,38 +24,21 @@ class CapturedPhoto:
 	local_path: str | None
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CAMERA_LOCK = Lock()
 PREVIEW_PROCESS_LOCK = Lock()
 ACTIVE_PREVIEW_PROCESS = None
 
 
-def _project_path(environment_name: str, default: str) -> Path:
-	configured_path = Path(os.getenv(environment_name, default))
-	return configured_path if configured_path.is_absolute() else PROJECT_ROOT / configured_path
-
-
 def photo_storage_dir() -> Path:
-	return _project_path("PHOTO_STORAGE_DIR", "data/images")
+	return project_path("PHOTO_STORAGE_DIR", "data/images")
 
 
 def bypass_image_path() -> Path:
-	return _project_path("DEV_BYPASS_IMAGE", "frontend/public/image.jpg")
+	return project_path("DEV_BYPASS_IMAGE", "frontend/public/image.jpg")
 
 
 def watermark_image_path() -> Path:
-	return _project_path("WATERMARK_IMAGE_PATH", "backend/watermark.png")
-
-
-def is_dev_bypass() -> bool:
-	configured_value = os.getenv("DEV_BYPASS", "false")
-	is_enabled = configured_value.lower() in {
-		"1",
-		"true",
-		"yes",
-	}
-	logger.info("Camera development bypass=%s configured_value=%s", is_enabled, configured_value)
-	return is_enabled
+	return project_path("WATERMARK_IMAGE_PATH", "backend/watermark.png")
 
 
 def _bypass_image_bytes() -> bytes | None:
@@ -119,25 +105,119 @@ def capture_preview_frame() -> bytes:
 				ACTIVE_PREVIEW_PROCESS = None
 
 	if result_code != 0 or not stdout:
-		logger.error("gphoto2 preview returned code=%s output_present=%s", result_code, bool(stdout))
+		# A negative code from SIGTERM means stop_preview_capture ended it to make way for a capture.
+		level = logging.INFO if result_code == -signal.SIGTERM else logging.ERROR
+		logger.log(level, "gphoto2 preview returned code=%s output_present=%s", result_code, bool(stdout))
 		raise CameraCaptureError("The camera preview is unavailable")
 
 	return stdout
 
 
-def preview_stream(first_frame: bytes):
-	"""Yield JPEG preview frames until the browser closes the stream."""
-	frame = first_frame
-	while True:
-		yield (
-			b"--frame\r\n"
-			b"Content-Type: image/jpeg\r\n"
-			+ f"Content-Length: {len(frame)}\r\n\r\n".encode("ascii")
-			+ frame
-			+ b"\r\n"
-		)
-		time.sleep(0.1)
-		frame = capture_preview_frame()
+class PreviewHub:
+	"""Share one gphoto2 preview loop between all connected preview streams."""
+
+	MAX_CONSECUTIVE_FAILURES = 3
+	FRAME_TIMEOUT_SECONDS = 20
+
+	def __init__(self) -> None:
+		self._condition = Condition()
+		self._thread: Thread | None = None
+		self._subscribers = 0
+		self._frame: bytes | None = None
+		self._sequence = 0
+		self._error: CameraCaptureError | None = None
+
+	def open(self) -> Iterator[bytes]:
+		"""Join the preview loop and wait for the first frame.
+
+		Raises CameraCaptureError when the camera cannot produce a frame.
+		"""
+		with self._condition:
+			self._subscribers += 1
+			if self._thread is None:
+				self._frame = None
+				self._error = None
+				self._thread = Thread(target=self._run, name="camera-preview", daemon=True)
+				self._thread.start()
+
+		try:
+			frame, sequence = self._wait_for_frame(0)
+		except CameraCaptureError:
+			self._leave()
+			raise
+		return self._frames(frame, sequence)
+
+	def _leave(self) -> None:
+		with self._condition:
+			self._subscribers -= 1
+
+	def _wait_for_frame(self, last_sequence: int) -> tuple[bytes, int]:
+		with self._condition:
+			has_new_frame = self._condition.wait_for(
+				lambda: self._sequence != last_sequence or self._error is not None,
+				timeout=self.FRAME_TIMEOUT_SECONDS,
+			)
+			if self._sequence != last_sequence and self._frame is not None:
+				return self._frame, self._sequence
+			if self._error is not None:
+				raise self._error
+			if not has_new_frame:
+				raise CameraCaptureError("The camera preview timed out")
+			raise CameraCaptureError("The camera preview is unavailable")
+
+	def _frames(self, frame: bytes, sequence: int) -> Iterator[bytes]:
+		try:
+			while True:
+				yield (
+					b"--frame\r\n"
+					b"Content-Type: image/jpeg\r\n"
+					+ f"Content-Length: {len(frame)}\r\n\r\n".encode("ascii")
+					+ frame
+					+ b"\r\n"
+				)
+				try:
+					frame, sequence = self._wait_for_frame(sequence)
+				except CameraCaptureError:
+					logger.warning("Preview stream ended because the camera stopped producing frames")
+					return
+		finally:
+			self._leave()
+
+	def _run(self) -> None:
+		failures = 0
+		while True:
+			with self._condition:
+				if self._subscribers <= 0:
+					self._thread = None
+					return
+
+			try:
+				frame = capture_preview_frame()
+			except CameraCaptureError as error:
+				failures += 1
+				if failures >= self.MAX_CONSECUTIVE_FAILURES:
+					with self._condition:
+						self._error = error
+						self._thread = None
+						self._condition.notify_all()
+					return
+				time.sleep(0.5)
+				continue
+
+			failures = 0
+			with self._condition:
+				self._frame = frame
+				self._sequence += 1
+				self._condition.notify_all()
+			time.sleep(0.1)
+
+
+PREVIEW_HUB = PreviewHub()
+
+
+def preview_stream() -> Iterator[bytes]:
+	"""Open a multipart JPEG preview stream that ends when the browser disconnects."""
+	return PREVIEW_HUB.open()
 
 
 def add_watermark(image_path: Path) -> None:

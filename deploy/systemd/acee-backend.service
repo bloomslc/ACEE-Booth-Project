@@ -1,0 +1,15 @@
+[Unit]
+Description=ACEE Portrait Booth API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bloomslc
+WorkingDirectory=/home/bloomslc/ACEE-Booth-Project
+ExecStart=/home/bloomslc/ACEE-Booth-Project/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 --app-dir backend
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,19 +1,22 @@
-import os
 import logging
+import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
-from dotenv import load_dotenv
 
-from .camera import CameraCaptureError, bypass_image_path, capture_photo, capture_preview_frame, is_dev_bypass, photo_storage_dir, preview_stream
+from .auth import require_token
+from .camera import CameraCaptureError, bypass_image_path, capture_photo, photo_storage_dir, preview_stream
+from .config import is_dev_bypass
 from .database import DatabaseError, create_session, initialize, is_configured, record_delivery, record_photo
 from .email import EmailDelivery, EmailDeliveryError, send_photo_email
-from .storage import ImageStorageError, upload_image
+from .storage import ImageStorageError, delete_image, object_key, upload_image
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -40,21 +43,45 @@ class CaptureResponse(BaseModel):
 	remote_url: str | None
 
 
-app = FastAPI(title="ACEE Portrait Booth API")
+def allowed_origins() -> list[str]:
+	"""Allow any origin unless FRONTEND_ORIGIN lists specific ones; the booth token is the access control."""
+	origins = [origin.strip() for origin in os.getenv("FRONTEND_ORIGIN", "").split(",") if origin.strip()]
+	return origins or ["*"]
+
+
+def build_public_url(request: Request, path: str) -> str:
+	"""Build a URL on the host the client used to reach this API, so it works for any server address."""
+	return f"{str(request.base_url).rstrip('/')}/{path.lstrip('/')}"
+
+
+def is_allowed_image_url(image_url: str, request: Request) -> bool:
+	"""Only accept image URLs that point at this booth's API or image bucket."""
+	prefixes = [
+		build_public_url(request, "/images/"),
+		build_public_url(request, "/api/v1/dev-bypass-image"),
+	]
+	bucket_base_url = os.getenv("S3_PUBLIC_BASE_URL", "").strip().rstrip("/")
+	if bucket_base_url:
+		prefixes.append(f"{bucket_base_url}/")
+	return image_url.startswith(tuple(prefixes))
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+	if is_configured():
+		initialize()
+	yield
+
+
+app = FastAPI(title="ACEE Portrait Booth API", lifespan=lifespan)
 app.add_middleware(
 	CORSMiddleware,
-	allow_origins=[os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")],
+	allow_origins=allowed_origins(),
 	allow_methods=["POST", "GET"],
-	allow_headers=["Content-Type"],
+	allow_headers=["Content-Type", "X-Booth-Token"],
 )
 photo_storage_dir().mkdir(parents=True, exist_ok=True)
 app.mount("/images", StaticFiles(directory=photo_storage_dir()), name="images")
-
-
-@app.on_event("startup")
-def startup() -> None:
-	if is_configured():
-		initialize()
 
 
 @app.get("/api/v1/health")
@@ -75,7 +102,7 @@ def dev_bypass_image() -> FileResponse:
 	return FileResponse(bypass_image_path(), media_type="image/jpeg")
 
 
-@app.post("/api/v1/capture", response_model=CaptureResponse)
+@app.post("/api/v1/capture", response_model=CaptureResponse, dependencies=[Depends(require_token)])
 def capture(request: Request) -> CaptureResponse:
 	try:
 		captured_photo = capture_photo()
@@ -106,18 +133,16 @@ def capture(request: Request) -> CaptureResponse:
 			logger.info("Capture recorded in database session_id=%s", session_id)
 		except DatabaseError as error:
 			logger.exception("Capture database record failed session_id=%s", session_id)
+			if remote_url:
+				delete_image(object_key(captured_photo.local_path, session_id))
+			Path(captured_photo.local_path).unlink(missing_ok=True)
 			raise HTTPException(status_code=503, detail=str(error)) from error
 
 	image_url = remote_url
 	if captured_photo.local_path and not image_url:
-		filename = Path(captured_photo.local_path).name
-		configured_base_url = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
-		public_base_url = configured_base_url or str(request.base_url).rstrip("/")
-		if "0.0.0.0" in public_base_url:
-			public_base_url = str(request.base_url).rstrip("/")
-		image_url = f"{public_base_url.rstrip('/')}/images/{filename}"
+		image_url = build_public_url(request, f"/images/{Path(captured_photo.local_path).name}")
 	if not image_url:
-		image_url = f"{str(request.base_url).rstrip('/')}/api/v1/dev-bypass-image"
+		image_url = build_public_url(request, "/api/v1/dev-bypass-image")
 
 	return CaptureResponse(
 		status="captured",
@@ -128,22 +153,22 @@ def capture(request: Request) -> CaptureResponse:
 	)
 
 
-@app.get("/api/v1/camera/preview")
+@app.get("/api/v1/camera/preview", dependencies=[Depends(require_token)])
 def preview() -> StreamingResponse:
 	try:
-		first_frame = capture_preview_frame()
+		frames = preview_stream()
 	except CameraCaptureError as error:
 		raise HTTPException(status_code=503, detail=str(error)) from error
 
 	return StreamingResponse(
-		preview_stream(first_frame),
+		frames,
 		media_type="multipart/x-mixed-replace; boundary=frame",
 		headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
 	)
 
 
-@app.post("/api/v1/deliveries/email", response_model=EmailDeliveryResponse)
-def deliver_email(request: EmailDeliveryRequest) -> EmailDeliveryResponse:
+@app.post("/api/v1/deliveries/email", response_model=EmailDeliveryResponse, dependencies=[Depends(require_token)])
+def deliver_email(request: EmailDeliveryRequest, http_request: Request) -> EmailDeliveryResponse:
 	logger.info(
 		"Email delivery requested recipient=%s session_id=%s image_url_present=%s dev_bypass=%s",
 		request.email,
@@ -151,6 +176,8 @@ def deliver_email(request: EmailDeliveryRequest) -> EmailDeliveryResponse:
 		bool(request.image_url),
 		is_dev_bypass(),
 	)
+	if request.image_url and not is_dev_bypass() and not is_allowed_image_url(request.image_url, http_request):
+		raise HTTPException(status_code=400, detail="The image URL does not belong to this booth")
 	if is_dev_bypass():
 		logger.warning("Email delivery skipped because DEV_BYPASS is enabled")
 		provider_id = "dev-bypass"

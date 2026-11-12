@@ -89,7 +89,6 @@ export default function PhotoBooth() {
                 <ThankYou
                     onBackHome={startNewSession}
                     guest={guest}
-                    sessionId={sessionId? sessionId : undefined}
                 />
             )}
         </main>

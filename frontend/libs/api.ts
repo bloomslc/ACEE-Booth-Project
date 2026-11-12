@@ -1,6 +1,7 @@
 import type { GuestInfo } from './booth-config'
+import { getApiUrl } from './server-settings'
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
+const apiToken = process.env.NEXT_PUBLIC_API_TOKEN ?? ''
 const frontendDevBypass = process.env.NEXT_PUBLIC_DEV_BYPASS === 'true'
 
 type CapturedPhoto = {
@@ -9,20 +10,33 @@ type CapturedPhoto = {
   remoteUrl: string | null
 }
 
+function authHeaders(): Record<string, string> {
+  return apiToken ? { 'X-Booth-Token': apiToken } : {}
+}
+
 export function previewStreamUrl(): string {
-  return frontendDevBypass ? '/image.jpg' : `${apiUrl}/api/v1/camera/preview`
+  if (frontendDevBypass) {
+    return '/image.jpg'
+  }
+
+  // Images cannot send headers, so the preview stream takes the token as a query parameter.
+  const query = apiToken ? `?token=${encodeURIComponent(apiToken)}` : ''
+  return `${getApiUrl()}/api/v1/camera/preview${query}`
 }
 
 export async function capturePhoto(): Promise<CapturedPhoto> {
   if (frontendDevBypass) {
-      return {
-  		imageUrl: '/image.jpg',
+    return {
+      imageUrl: '/image.jpg',
       sessionId: crypto.randomUUID(),
       remoteUrl: null,
     }
   }
 
-  const response = await fetch(`${apiUrl}/api/v1/capture`, { method: 'POST' })
+  const response = await fetch(`${getApiUrl()}/api/v1/capture`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
@@ -46,14 +60,12 @@ export async function sendPhotoByEmail(
   sessionId: string | null,
 ): Promise<void> {
   if (frontendDevBypass) {
-    console.warn('[email] skipped because NEXT_PUBLIC_DEV_BYPASS is enabled in the frontend build')
     return
   }
 
-  console.info('[email] sending delivery request', { apiUrl, sessionId, hasImageUrl: Boolean(imageUrl) })
-  const response = await fetch(`${apiUrl}/api/v1/deliveries/email`, {
+  const response = await fetch(`${getApiUrl()}/api/v1/deliveries/email`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({
       name: guest.name,
       email: guest.email,
@@ -64,9 +76,6 @@ export async function sendPhotoByEmail(
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    console.error('[email] delivery request failed', response.status, error)
     throw new Error(error?.detail ?? 'The photo could not be sent')
   }
-
-  console.info('[email] delivery request accepted')
 }

@@ -1,9 +1,13 @@
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
+from functools import lru_cache
 
 import psycopg
 from psycopg import Connection
+from psycopg_pool import ConnectionPool, PoolTimeout
+
+from .config import is_dev_bypass
 
 
 class DatabaseError(RuntimeError):
@@ -11,27 +15,39 @@ class DatabaseError(RuntimeError):
 
 
 def is_configured() -> bool:
-	dev_bypass = os.getenv("DEV_BYPASS", "false")
-	return bool(os.getenv("NEON_DATABASE_URL")) and dev_bypass.lower() not in {"1", "true", "yes"}
+	return bool(os.getenv("NEON_DATABASE_URL")) and not is_dev_bypass()
 
 
-def _connection() -> Connection:
+@lru_cache(maxsize=1)
+def _pool() -> ConnectionPool:
 	if not is_configured():
 		raise DatabaseError("Neon database is not configured")
 
+	pool = ConnectionPool(
+		os.environ["NEON_DATABASE_URL"],
+		min_size=1,
+		max_size=4,
+		kwargs={"connect_timeout": 5},
+		check=ConnectionPool.check_connection,
+		open=False,
+	)
 	try:
-		return psycopg.connect(os.environ["NEON_DATABASE_URL"], connect_timeout=5)
-	except (KeyError, psycopg.Error) as error:
+		pool.open(wait=True, timeout=10)
+	except PoolTimeout as error:
+		pool.close()
 		raise DatabaseError("Could not connect to Neon") from error
+	return pool
 
 
 @contextmanager
 def connection() -> Iterator[Connection]:
-	db = _connection()
 	try:
-		yield db
-	finally:
-		db.close()
+		with _pool().connection(timeout=10) as db:
+			yield db
+	except (PoolTimeout, psycopg.OperationalError) as error:
+		raise DatabaseError("Could not connect to Neon") from error
+	except psycopg.Error as error:
+		raise DatabaseError("The booth database could not complete the request") from error
 
 
 def initialize() -> None:
@@ -69,14 +85,11 @@ def initialize() -> None:
 		)
 		""",
 	)
-	try:
-		with connection() as db:
-			with db.cursor() as cursor:
-				for statement in statements:
-					cursor.execute(statement)
-			db.commit()
-	except psycopg.Error as error:
-		raise DatabaseError("Could not initialize Neon tables") from error
+	with connection() as db:
+		with db.cursor() as cursor:
+			for statement in statements:
+				cursor.execute(statement)
+		db.commit()
 
 
 def create_session(session_id: str) -> None:

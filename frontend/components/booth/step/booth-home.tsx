@@ -3,6 +3,7 @@ import { Aperture } from "lucide-react";
 import BoothStructure, { BoothStructureContent, BoothStructureAction } from "../booth-structure";
 import Button from "@/components/button";
 import Social from "@/components/social";
+import ServerSettings from "@/components/server-settings";
 
 interface BoothHomeProps {
     onBegin: () => void;
@@ -12,7 +13,8 @@ export default function BoothHome({ onBegin }: BoothHomeProps) {
     return (
         <BoothStructure>
             <BoothStructureContent>
-                <div className="flex h-full w-full items-center justify-center rounded-3xl border border-[#dbe7f2] bg-white p-8 text-text shadow-[0_18px_50px_rgba(26,54,102,0.10)]">
+                <div className="relative flex h-full w-full items-center justify-center rounded-3xl border border-[#dbe7f2] bg-white p-8 text-text shadow-[0_18px_50px_rgba(26,54,102,0.10)]">
+                    <ServerSettings />
                     <div className="flex max-w-2xl flex-col items-center gap-6 text-center">
                         <div className="flex flex-col gap-3">
                             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6b86a8]">Welcome to</span>

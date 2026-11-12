@@ -10,7 +10,6 @@ interface ThankYouProps {
         name: string;
         email: string;
     };
-    sessionId?: string;
 }
 
 export default function ThankYou({ onBackHome, guest }: ThankYouProps) {

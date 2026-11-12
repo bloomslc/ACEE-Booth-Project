@@ -7,9 +7,8 @@ import { Mail, UserRound, X } from "lucide-react"
 type GuestFormProps = {
   onSubmit: (info: GuestInfo) => void
   onCancel?: () => void
-  afterPhoto?: boolean
-    isSending?: boolean
-    error?: string | null
+  isSending?: boolean
+  error?: string | null
 }
 
 export default function GuestForm({ onSubmit, onCancel, isSending = false, error }: GuestFormProps) {

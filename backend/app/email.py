@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 from dataclasses import dataclass
 from email.utils import parseaddr
 
@@ -74,7 +74,11 @@ def send_photo_email(delivery: EmailDelivery) -> str:
 			timeout=20,
 		)
 		response.raise_for_status()
-		logger.info("Resend accepted email recipient=%s provider_id=%s", delivery.recipient, response.json().get("id", ""))
+		logger.info(
+			"Resend accepted email recipient=%s provider_id=%s",
+			delivery.recipient,
+			response.json().get("id", ""),
+		)
 	except httpx.HTTPStatusError as error:
 		detail = error.response.text[:500]
 		raise EmailDeliveryError(f"Resend rejected the email: {detail}") from error

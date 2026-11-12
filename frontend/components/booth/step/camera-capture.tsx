@@ -44,7 +44,7 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
                                 alt="Camera preview"
                                 unoptimized
                                 onError={() => setError('The camera preview is unavailable')}
-                                className="w-full h-full object-contain rounded-4xl"
+                                className="w-full h-full object-cover rounded-4xl"
                             />
                         ) : (
                             <div className="h-full w-full" aria-hidden="true" />

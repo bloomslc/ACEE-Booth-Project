@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 from pathlib import Path
 
 import boto3
@@ -13,21 +14,37 @@ def is_configured() -> bool:
 	return bool(os.getenv("S3_BUCKET"))
 
 
+@lru_cache(maxsize=1)
+def _client():
+	return boto3.client(
+		"s3",
+		endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
+		region_name=os.getenv("S3_REGION", "us-east-1"),
+		aws_access_key_id=os.getenv("S3_ACCESS_KEY_ID"),
+		aws_secret_access_key=os.getenv("S3_SECRET_ACCESS_KEY"),
+	)
+
+
+def delete_image(key: str) -> None:
+	"""Remove an uploaded object, ignoring failures so cleanup never masks the original error."""
+	try:
+		_client().delete_object(Bucket=os.environ["S3_BUCKET"], Key=key)
+	except (BotoCoreError, ClientError, KeyError):
+		pass
+
+
+def object_key(local_path: str, session_id: str) -> str:
+	return f"sessions/{session_id}/{Path(local_path).name}"
+
+
 def upload_image(local_path: str, session_id: str) -> str:
 	if not is_configured():
 		raise ImageStorageError("S3_BUCKET is not configured")
 
 	path = Path(local_path)
-	key = f"sessions/{session_id}/{path.name}"
+	key = object_key(local_path, session_id)
 	try:
-		client = boto3.client(
-			"s3",
-			endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
-			region_name=os.getenv("S3_REGION", "us-east-1"),
-			aws_access_key_id=os.getenv("S3_ACCESS_KEY_ID"),
-			aws_secret_access_key=os.getenv("S3_SECRET_ACCESS_KEY"),
-		)
-		client.upload_file(
+		_client().upload_file(
 			str(path),
 			os.environ["S3_BUCKET"],
 			key,

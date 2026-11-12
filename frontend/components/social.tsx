@@ -1,30 +1,26 @@
-import { boothConfig } from '@/libs/booth-config'
+import Image from 'next/image'
 import { useState } from 'react'
+import { boothConfig } from '@/libs/booth-config'
 import Qrcode from './qrcode'
 
-type SocialType = 'bloom' | 'linkedin' | 'instagram' | 'facebook'
-
-const socialLinks = boothConfig.links.map((link) => {
-    const type = link.title.toLowerCase() as SocialType
-        return { ...link, type }
-    }
-)
+type SocialLink = (typeof boothConfig.links)[number]
 
 export default function Social() {
-    const [selectedSocial, setSelectedSocial] = useState<typeof socialLinks[number]>();
+    const [selectedSocial, setSelectedSocial] = useState<SocialLink>()
     return (
         <>
             <div>
                 <h2>Follow our social media</h2>
                 <div className="grid grid-cols-4 gap-3">
-                    {socialLinks.map((social) => (
+                    {boothConfig.links.map((social) => (
                         <button
                             key={social.type}
                             type="button"
+                            aria-label={social.title}
                             onClick={() => setSelectedSocial(social)}
                             className="flex flex-col items-center gap-2 rounded-4xl bg-secondary p-5 text-text shadow-sm"
                         >
-                            <img src={`/${social.type}.svg`} width={48} height={48} alt="" aria-hidden="true" />
+                            <Image src={`/${social.type}.svg`} width={48} height={48} alt="" aria-hidden="true" />
                         </button>
                     ))}
                 </div>
@@ -38,7 +34,7 @@ export default function Social() {
                     onClick={() => setSelectedSocial(undefined)}
                 >
                     <div className="relative rounded-4xl bg-white p-6" onClick={(event) => event.stopPropagation()}>
-                        <Qrcode value={selectedSocial.title} type={selectedSocial.type} />
+                        <Qrcode value={selectedSocial.href} type={selectedSocial.type} />
                     </div>
                 </div>
             )}

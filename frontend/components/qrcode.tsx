@@ -1,8 +1,9 @@
 import { ReactQRCode } from "@lglab/react-qr-code";
+import type { SocialType } from "@/libs/booth-config";
 
 interface QrcodeProps {
     value: string;
-    type?: "bloom" | "instagram" | "linkedin" | "facebook";
+    type?: SocialType;
 }
 
 export default function Qrcode( { value, type = "bloom" }: QrcodeProps ) {
