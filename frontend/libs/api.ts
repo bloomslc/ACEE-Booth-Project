@@ -10,6 +10,28 @@ type CapturedPhoto = {
   remoteUrl: string | null
 }
 
+export type CameraMode = 'live' | 'ftp'
+
+export class CaptureTimeoutError extends Error {
+  constructor() {
+    super('No photo arrived from the camera yet')
+  }
+}
+
+export async function getCameraMode(): Promise<CameraMode> {
+  if (frontendDevBypass) {
+    return 'live'
+  }
+
+  try {
+    const response = await fetch(`${getApiUrl()}/api/v1/health`)
+    const body = await response.json()
+    return body?.camera_mode === 'ftp' ? 'ftp' : 'live'
+  } catch {
+    return 'live'
+  }
+}
+
 function authHeaders(): Record<string, string> {
   return apiToken ? { 'X-Booth-Token': apiToken } : {}
 }
@@ -24,7 +46,7 @@ export function previewStreamUrl(): string {
   return `${getApiUrl()}/api/v1/camera/preview${query}`
 }
 
-export async function capturePhoto(): Promise<CapturedPhoto> {
+export async function capturePhoto(signal?: AbortSignal): Promise<CapturedPhoto> {
   if (frontendDevBypass) {
     return {
       imageUrl: '/image.jpg',
@@ -36,8 +58,13 @@ export async function capturePhoto(): Promise<CapturedPhoto> {
   const response = await fetch(`${getApiUrl()}/api/v1/capture`, {
     method: 'POST',
     headers: authHeaders(),
+    signal,
   })
   const body = await response.json().catch(() => null)
+
+  if (response.status === 408) {
+    throw new CaptureTimeoutError()
+  }
 
   if (!response.ok) {
     throw new Error(body?.detail ?? 'The photo could not be captured')

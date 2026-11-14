@@ -1,9 +1,10 @@
 import { ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import BoothStructure, { BoothStructureContent, BoothStructureAction } from "../booth-structure";
-import { capturePhoto, previewStreamUrl } from "@/libs/api";
-import { useState } from "react";
+import { capturePhoto, getCameraMode, previewStreamUrl, type CameraMode } from "@/libs/api";
+import { useEffect, useState } from "react";
 import Button from "@/components/button";
+import FtpCapture from "./ftp-capture";
 
 interface CameraCaptureProps {
     onCapture: (imageUrl: string, sessionId: string) => void;
@@ -14,6 +15,17 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
     const [isCapturing, setIsCapturing] = useState(false)
     const [isPreviewEnabled, setIsPreviewEnabled] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [mode, setMode] = useState<CameraMode | null>(null)
+
+    useEffect(() => {
+        let isActive = true
+        void getCameraMode().then((cameraMode) => {
+            if (isActive) setMode(cameraMode)
+        })
+        return () => {
+            isActive = false
+        }
+    }, [])
 
     async function handleCapture() {
         setIsPreviewEnabled(false)
@@ -31,12 +43,16 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
         }
     }
 
+    if (mode === 'ftp') {
+        return <FtpCapture onCapture={onCapture} onCancel={onCancel} />
+    }
+
     return (
         <BoothStructure>
             <BoothStructureContent>
                 <div className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden rounded-3xl border border-[#dbe7f2] bg-[#f7faff] p-4 shadow-[0_18px_50px_rgba(26,54,102,0.10)]">
                     <div className="aspect-2/3 h-full min-h-0 min-w-0 max-h-full w-auto max-w-full overflow-hidden rounded-2xl bg-black shadow-inner">
-                        {isPreviewEnabled ? (
+                        {isPreviewEnabled && mode === 'live' ? (
                             <Image
                                 src={previewStreamUrl()}
                                 width={500}
@@ -67,7 +83,7 @@ export default function CameraCapture({ onCapture, onCancel }: CameraCaptureProp
                         onClick={() => void handleCapture()}
                         type="button"
                         aria-label="Take photo"
-                        disabled={isCapturing}
+                        disabled={isCapturing || mode === null}
                         className="group flex h-full w-auto aspect-square items-center justify-center rounded-full p-2 border-4 border-red-500 transition-transform active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                     >
                         <span className="h-full w-auto aspect-square rounded-full bg-red-500 transition-transform group-active:scale-90" />

@@ -31,6 +31,7 @@ sessions, photos, and delivery results when it is enabled.
 backend/
 	app/main.py       FastAPI routes and application startup
 	app/camera.py     gphoto2 capture, shared preview stream, and watermarking
+	app/ftp.py        Embedded FTP server for camera uploads (FTP mode)
 	app/auth.py       Booth token check for protected routes
 	app/config.py     Shared environment and path helpers
 	app/storage.py    S3-compatible image upload
@@ -90,6 +91,10 @@ without a camera, use the bypass configuration described below.
 | `RESEND_TEMPLATE_IMAGE_VARIABLE` | Template variable that receives the image URL (default `PHOTO_IMAGE`) |
 | `BOOTH_API_TOKEN` | Shared token required on capture, preview, and email requests (empty disables auth) |
 | `FRONTEND_ORIGIN` | Optional comma-separated CORS origins (empty allows any origin) |
+| `CAMERA_MODE` | `gphoto2` (USB camera, default) or `ftp` (camera uploads over the network) |
+| `FTP_PORT`, `FTP_USER`, `FTP_PASSWORD` | FTP server settings for FTP mode (defaults `2121`, `booth`; the password is required) |
+| `FTP_PASSIVE_PORTS`, `FTP_UPLOAD_DIR`, `FTP_CAPTURE_TIMEOUT` | Passive data ports (default `60000-60010`), upload folder (default `data/ftp-incoming`), and seconds a capture waits for a photo (default `120`) |
+| `FTP_HOST`, `FTP_MASQUERADE_ADDRESS` | Optional FTP bind address (default `0.0.0.0`) and advertised address for passive mode behind NAT |
 | `PHOTO_STORAGE_DIR` | Capture directory (default `data/images`) |
 | `WATERMARK_IMAGE_PATH` | Watermark PNG (default `backend/watermark.png`) |
 | `DEV_BYPASS`, `DEV_BYPASS_IMAGE` | Camera-free development mode and its image |
@@ -228,6 +233,41 @@ gphoto2 --auto-detect
 gphoto2 --capture-image-and-download
 ```
 
+## FTP mode
+
+Instead of USB and `gphoto2`, the camera can send each photo to the Pi over the
+network. Set `CAMERA_MODE=ftp` and `FTP_PASSWORD` in `backend/.env`; the API then
+starts an FTP server on `FTP_PORT` (default 2121) when it launches. The camera
+and the Pi must be on the same network, and `gphoto2` is not needed.
+
+In the camera's FTP transfer settings (on Sony cameras, the network FTP
+function), create a server entry with:
+
+- Host: the Pi's address
+- Port: `FTP_PORT`
+- User and password: `FTP_USER` and `FTP_PASSWORD`
+- Passive mode: on
+- Transfer JPEG only, or leave RAW+JPEG on; non-JPEG files are ignored
+- Secure protocol (FTPS): off, since the server speaks plain FTP
+
+Open the Pi's firewall for `FTP_PORT` and the `FTP_PASSIVE_PORTS` range, and
+keep the Pi on the local network only. The FTP password travels unencrypted.
+Cameras that only allow port 21 need the API to bind it: set `FTP_PORT=21` and
+add `AmbientCapabilities=CAP_NET_BIND_SERVICE` to `acee-backend.service`.
+
+How it works:
+
+- There is no live preview. The camera screen asks the operator to shoot with
+	the camera, shows a waiting message, and calls `POST /capture`, which waits
+	for the next photo the camera uploads.
+- The uploaded JPEG is moved into `PHOTO_STORAGE_DIR` under a UUID name, then
+	watermarked, uploaded to the bucket, and recorded exactly like a `gphoto2`
+	capture. The camera's original is removed from the FTP folder.
+- Only photos taken while a capture request is waiting are used. Shots taken on
+	other screens stay in `FTP_UPLOAD_DIR` and are never cleaned up automatically.
+- The FTP user can upload and create folders but cannot read or delete files.
+- `DEV_BYPASS=true` overrides FTP mode.
+
 ## Image bucket
 
 Set the S3-compatible bucket variables in `backend/.env` to upload each real
@@ -340,8 +380,8 @@ All routes use the `/api/v1` prefix. Routes marked **token** require
 
 ### `GET /health`
 
-Returns application, email provider, database, `dev_bypass`, and
-`image_storage` (`s3` or `local`) status.
+Returns application, email provider, database, `dev_bypass`, `camera_mode`
+(`gphoto2`, `ftp`, or `bypass`), and `image_storage` (`s3` or `local`) status.
 
 ### `GET /dev-bypass-image`
 
@@ -352,10 +392,13 @@ Serves the configured bypass image. Returns `404` unless `DEV_BYPASS` is on.
 Returns a continuous multipart JPEG preview stream using
 `gphoto2 --capture-preview --stdout`. It does not save a photo. The browser
 closes this request before starting a capture. Camera errors return `503`.
+Returns `404` in FTP mode, which has no live preview.
 
 ### `POST /capture` (token)
 
-Captures and locally saves a photo, uploads it to the bucket when configured
+Captures and locally saves a photo (in FTP mode it waits up to
+`FTP_CAPTURE_TIMEOUT` seconds for the camera to upload one, then returns `408`),
+uploads it to the bucket when configured
 (`502` on failure), records it in Neon when enabled (`503` on failure), then
 returns:
 
@@ -389,6 +432,7 @@ This is an end-to-end booth prototype, not yet a production queueing system.
 - Captured files remain on local disk and in the bucket indefinitely; there is
 	no retention or cleanup job, even though the guest form promises data is kept
 	for the event or 48 hours.
+- FTP mode has no live preview, and the FTP connection is unencrypted.
 - The preview stream runs a separate `gphoto2` call per frame; benchmark this on
 	the exact Pi and camera hardware.
 - Authentication is a single shared booth token, not per-operator accounts.

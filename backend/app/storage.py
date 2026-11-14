@@ -25,6 +25,20 @@ def _client():
 	)
 
 
+def public_base_url() -> str:
+	"""Base URL under which uploaded objects are publicly readable."""
+	configured_base_url = os.getenv("S3_PUBLIC_BASE_URL")
+	if configured_base_url:
+		return configured_base_url.rstrip("/")
+
+	bucket = os.environ["S3_BUCKET"]
+	endpoint_url = os.getenv("S3_ENDPOINT_URL")
+	if endpoint_url:
+		return f"{endpoint_url.rstrip('/')}/{bucket}"
+
+	return f"https://{bucket}.s3.{os.getenv('S3_REGION', 'us-east-1')}.amazonaws.com"
+
+
 def delete_image(key: str) -> None:
 	"""Remove an uploaded object, ignoring failures so cleanup never masks the original error."""
 	try:
@@ -53,12 +67,4 @@ def upload_image(local_path: str, session_id: str) -> str:
 	except (BotoCoreError, ClientError, OSError, KeyError) as error:
 		raise ImageStorageError("The image could not be uploaded") from error
 
-	public_base_url = os.getenv("S3_PUBLIC_BASE_URL")
-	if public_base_url:
-		return f"{public_base_url.rstrip('/')}/{key}"
-
-	endpoint_url = os.getenv("S3_ENDPOINT_URL")
-	if endpoint_url:
-		return f"{endpoint_url.rstrip('/')}/{os.environ['S3_BUCKET']}/{key}"
-
-	return f"https://{os.environ['S3_BUCKET']}.s3.{os.getenv('S3_REGION', 'us-east-1')}.amazonaws.com/{key}"
+	return f"{public_base_url()}/{key}"

@@ -6,3 +6,4 @@ pydantic[email]>=2.9,<3
 python-dotenv>=1.0,<2
 uvicorn[standard]>=0.30,<1
 Pillow>=11,<13
+pyftpdlib>=2,<3

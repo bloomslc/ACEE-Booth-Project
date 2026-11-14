@@ -39,6 +39,7 @@ def test_token_accepted_as_header_or_query(client: TestClient, monkeypatch: pyte
 
 
 def test_email_rejects_foreign_image_url(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+	monkeypatch.setenv("S3_BUCKET", "bucket")
 	monkeypatch.setenv("S3_PUBLIC_BASE_URL", "https://images.example.com")
 	monkeypatch.setattr(main, "send_photo_email", lambda delivery: "provider-1")
 
@@ -93,3 +94,23 @@ def test_database_failure_removes_uploaded_photo(
 	assert response.status_code == 503
 	assert len(deleted_keys) == 1 and deleted_keys[0].endswith("/abc.jpg")
 	assert not photo.exists()
+
+
+@pytest.mark.parametrize(
+	("env", "image_url"),
+	[
+		({"S3_ENDPOINT_URL": "https://acct.r2.example.com"}, "https://acct.r2.example.com/bucket/sessions/s/a.jpg"),
+		({"S3_REGION": "eu-west-1"}, "https://bucket.s3.eu-west-1.amazonaws.com/sessions/s/a.jpg"),
+	],
+)
+def test_email_accepts_upload_url_without_public_base_url(
+	client: TestClient, monkeypatch: pytest.MonkeyPatch, env: dict[str, str], image_url: str
+) -> None:
+	monkeypatch.setenv("S3_BUCKET", "bucket")
+	for name, value in env.items():
+		monkeypatch.setenv(name, value)
+	monkeypatch.setattr(main, "send_photo_email", lambda delivery: "provider-1")
+
+	response = client.post("/api/v1/deliveries/email", json={**EMAIL_BODY, "image_url": image_url})
+
+	assert response.status_code == 200

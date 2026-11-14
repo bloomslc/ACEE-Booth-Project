@@ -1,4 +1,5 @@
 import logging
+import shutil
 import signal
 import subprocess
 import time
@@ -291,6 +292,27 @@ def capture_photo() -> CapturedPhoto:
 		output_path.unlink(missing_ok=True)
 		detail = stderr or stdout or "no gphoto2 diagnostics"
 		raise CameraCaptureError(f"The camera did not return a photo: {detail[-500:]}")
+
+	try:
+		add_watermark(output_path)
+	except CameraCaptureError:
+		output_path.unlink(missing_ok=True)
+		raise
+
+	return CapturedPhoto(local_path=output_path.as_posix())
+
+
+def ingest_uploaded_photo(source: Path) -> CapturedPhoto:
+	"""Move a camera-uploaded JPEG into photo storage under a UUID name and watermark it."""
+	output_dir = photo_storage_dir()
+	output_dir.mkdir(parents=True, exist_ok=True)
+	output_path = output_dir / f"{uuid4().hex}.jpg"
+
+	try:
+		shutil.move(source, output_path)
+	except OSError as error:
+		logger.exception("Uploaded photo could not be moved path=%s", source)
+		raise CameraCaptureError("The uploaded photo could not be read") from error
 
 	try:
 		add_watermark(output_path)

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -6,17 +7,28 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 
 from .auth import require_token
-from .camera import CameraCaptureError, bypass_image_path, capture_photo, photo_storage_dir, preview_stream
-from .config import is_dev_bypass
+from .camera import (
+	CameraCaptureError,
+	CapturedPhoto,
+	bypass_image_path,
+	capture_photo,
+	ingest_uploaded_photo,
+	photo_storage_dir,
+	preview_stream,
+)
+from .config import camera_mode, is_dev_bypass, is_ftp_mode
 from .database import DatabaseError, create_session, initialize, is_configured, record_delivery, record_photo
 from .email import EmailDelivery, EmailDeliveryError, send_photo_email
-from .storage import ImageStorageError, delete_image, object_key, upload_image
+from .ftp import INBOX, RECEIVER, FtpConfigurationError, Upload, start_from_environment
+from .storage import ImageStorageError, delete_image, object_key, public_base_url, upload_image
+from .storage import is_configured as is_storage_configured
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -60,9 +72,8 @@ def is_allowed_image_url(image_url: str, request: Request) -> bool:
 		build_public_url(request, "/images/"),
 		build_public_url(request, "/api/v1/dev-bypass-image"),
 	]
-	bucket_base_url = os.getenv("S3_PUBLIC_BASE_URL", "").strip().rstrip("/")
-	if bucket_base_url:
-		prefixes.append(f"{bucket_base_url}/")
+	if is_storage_configured():
+		prefixes.append(f"{public_base_url()}/")
 	return image_url.startswith(tuple(prefixes))
 
 
@@ -70,7 +81,13 @@ def is_allowed_image_url(image_url: str, request: Request) -> bool:
 async def lifespan(_: FastAPI):
 	if is_configured():
 		initialize()
+	if is_ftp_mode():
+		try:
+			start_from_environment()
+		except (FtpConfigurationError, OSError) as error:
+			raise RuntimeError(f"The camera FTP server could not start: {error}") from error
 	yield
+	RECEIVER.stop()
 
 
 app = FastAPI(title="ACEE Portrait Booth API", lifespan=lifespan)
@@ -91,6 +108,7 @@ def health() -> dict[str, str]:
 		"email_provider": "resend",
 		"database": "neon" if is_configured() else "disabled",
 		"dev_bypass": "enabled" if is_dev_bypass() else "disabled",
+		"camera_mode": camera_mode(),
 		"image_storage": "s3" if os.getenv("S3_BUCKET") and not is_dev_bypass() else "local",
 	}
 
@@ -102,12 +120,36 @@ def dev_bypass_image() -> FileResponse:
 	return FileResponse(bypass_image_path(), media_type="image/jpeg")
 
 
+async def wait_for_camera_upload(request: Request) -> Upload:
+	"""Wait for the next photo the camera uploads over FTP, giving up if the client leaves or time runs out."""
+	timeout = float(os.getenv("FTP_CAPTURE_TIMEOUT", "120"))
+	baseline = INBOX.latest_sequence()
+	loop = asyncio.get_running_loop()
+	deadline = loop.time() + timeout
+	while loop.time() < deadline:
+		upload = INBOX.claim_after(baseline)
+		if upload:
+			return upload
+		if await request.is_disconnected():
+			raise HTTPException(status_code=499, detail="The client stopped waiting for a photo")
+		await asyncio.sleep(0.25)
+	raise HTTPException(status_code=408, detail="No photo arrived from the camera yet")
+
+
 @app.post("/api/v1/capture", response_model=CaptureResponse, dependencies=[Depends(require_token)])
-def capture(request: Request) -> CaptureResponse:
+async def capture(request: Request) -> CaptureResponse:
 	try:
-		captured_photo = capture_photo()
+		if is_ftp_mode():
+			upload = await wait_for_camera_upload(request)
+			captured_photo = await run_in_threadpool(ingest_uploaded_photo, upload.path)
+		else:
+			captured_photo = await run_in_threadpool(capture_photo)
 	except CameraCaptureError as error:
 		raise HTTPException(status_code=503, detail=str(error)) from error
+	return await run_in_threadpool(publish_capture, request, captured_photo)
+
+
+def publish_capture(request: Request, captured_photo: CapturedPhoto) -> CaptureResponse:
 	logger.info(
 		"Capture completed local_path_present=%s dev_bypass=%s s3_configured=%s database_configured=%s",
 		bool(captured_photo.local_path),
@@ -155,6 +197,8 @@ def capture(request: Request) -> CaptureResponse:
 
 @app.get("/api/v1/camera/preview", dependencies=[Depends(require_token)])
 def preview() -> StreamingResponse:
+	if is_ftp_mode():
+		raise HTTPException(status_code=404, detail="Live preview is not available in FTP mode")
 	try:
 		frames = preview_stream()
 	except CameraCaptureError as error:
