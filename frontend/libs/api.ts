@@ -32,6 +32,30 @@ export async function getCameraMode(): Promise<CameraMode> {
   }
 }
 
+export type CameraStatus = {
+  waiting: boolean
+  ftp: {
+    running: boolean
+    port: number | null
+    clients: number
+    last_login_seconds_ago: number | null
+    last_login_failed_seconds_ago: number | null
+    last_upload: { name: string; seconds_ago: number; used: boolean } | null
+  } | null
+}
+
+export async function getCameraStatus(): Promise<CameraStatus | null> {
+  try {
+    const response = await fetch(`${getApiUrl()}/api/v1/camera/status`, {
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(4000),
+    })
+    return response.ok ? ((await response.json()) as CameraStatus) : null
+  } catch {
+    return null
+  }
+}
+
 function authHeaders(): Record<string, string> {
   return apiToken ? { 'X-Booth-Token': apiToken } : {}
 }

@@ -118,3 +118,66 @@ def test_dev_bypass_overrides_ftp_mode(client: TestClient, monkeypatch: pytest.M
 	monkeypatch.setenv("DEV_BYPASS", "true")
 
 	assert client.get("/api/v1/health").json()["camera_mode"] == "bypass"
+
+
+def test_receiver_status_reports_camera_activity(tmp_path: Path) -> None:
+	receiver = FtpReceiver(UploadInbox())
+	receiver.start(host="127.0.0.1", port=0, password="pw", directory=tmp_path, passive_ports=range(50240, 50260))
+	try:
+		assert receiver.status()["last_upload"] is None
+		with ftplib.FTP() as client:
+			client.connect("127.0.0.1", receiver.port, timeout=5)
+			assert wait_until(lambda: receiver.status()["clients"] == 1)
+			client.login("booth", "pw")
+			client.storbinary("STOR notes.txt", io.BytesIO(b"x"))
+			assert wait_until(lambda: receiver.status()["last_upload"] is not None)
+
+		status = receiver.status()
+		assert status["running"] is True
+		assert status["last_login_seconds_ago"] is not None
+		assert status["last_upload"]["name"] == "notes.txt"
+		assert status["last_upload"]["used"] is False
+		assert wait_until(lambda: receiver.status()["clients"] == 0)
+	finally:
+		receiver.stop()
+
+
+def test_camera_status_endpoint_reflects_waiting_capture(
+	client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+	monkeypatch.setenv("CAMERA_MODE", "ftp")
+	monkeypatch.setenv("FTP_CAPTURE_TIMEOUT", "2")
+	seen: dict[str, object] = {}
+
+	def read_status() -> None:
+		seen.update(client.get("/api/v1/camera/status").json())
+
+	threading.Timer(0.5, read_status).start()
+	client.post("/api/v1/capture")
+
+	assert seen["mode"] == "ftp"
+	assert seen["waiting"] is True
+	assert client.get("/api/v1/camera/status").json()["waiting"] is False
+
+
+def test_newer_capture_request_supersedes_older_one(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+	monkeypatch.setenv("CAMERA_MODE", "ftp")
+	monkeypatch.setenv("FTP_CAPTURE_TIMEOUT", "3")
+	results: list[int] = []
+
+	older = threading.Thread(target=lambda: results.append(client.post("/api/v1/capture").status_code))
+	older.start()
+	time.sleep(0.5)
+	newer = threading.Thread(target=lambda: results.append(client.post("/api/v1/capture").status_code))
+	newer.start()
+	older.join(timeout=5)
+
+	assert results == [409]
+	newer.join(timeout=5)
+	assert sorted(results) == [408, 409]
+
+
+def test_status_is_empty_outside_ftp_mode(client: TestClient) -> None:
+	body = client.get("/api/v1/camera/status").json()
+
+	assert body["ftp"] is None and body["mode"] == "gphoto2"

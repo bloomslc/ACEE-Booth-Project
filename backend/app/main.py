@@ -35,6 +35,21 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 logger = logging.getLogger(__name__)
 
 
+def configure_logging() -> None:
+	"""Show app and FTP activity in the terminal; uvicorn only configures its own loggers."""
+	handler = logging.StreamHandler()
+	handler.setFormatter(logging.Formatter("%(levelname)s:     [%(name)s] %(message)s"))
+	for name in ("app", "pyftpdlib"):
+		package_logger = logging.getLogger(name)
+		if not package_logger.handlers:
+			package_logger.setLevel(logging.INFO)
+			package_logger.addHandler(handler)
+			package_logger.propagate = False
+
+
+configure_logging()
+
+
 class EmailDeliveryRequest(BaseModel):
 	name: str = Field(default="Guest", max_length=120)
 	email: EmailStr
@@ -113,6 +128,16 @@ def health() -> dict[str, str]:
 	}
 
 
+@app.get("/api/v1/camera/status", dependencies=[Depends(require_token)])
+def camera_status() -> dict[str, object]:
+	"""Tell the operator screen whether the booth is waiting for a photo and what the camera has sent."""
+	return {
+		"mode": camera_mode(),
+		"waiting": INBOX.waiting(),
+		"ftp": RECEIVER.status() if is_ftp_mode() else None,
+	}
+
+
 @app.get("/api/v1/dev-bypass-image")
 def dev_bypass_image() -> FileResponse:
 	if not is_dev_bypass():
@@ -124,15 +149,21 @@ async def wait_for_camera_upload(request: Request) -> Upload:
 	"""Wait for the next photo the camera uploads over FTP, giving up if the client leaves or time runs out."""
 	timeout = float(os.getenv("FTP_CAPTURE_TIMEOUT", "120"))
 	baseline = INBOX.latest_sequence()
+	generation = INBOX.begin_wait()
 	loop = asyncio.get_running_loop()
 	deadline = loop.time() + timeout
-	while loop.time() < deadline:
-		upload = INBOX.claim_after(baseline)
-		if upload:
-			return upload
-		if await request.is_disconnected():
-			raise HTTPException(status_code=499, detail="The client stopped waiting for a photo")
-		await asyncio.sleep(0.25)
+	try:
+		while loop.time() < deadline:
+			if not INBOX.is_latest_waiter(generation):
+				raise HTTPException(status_code=409, detail="A newer capture request took over")
+			upload = INBOX.claim_after(baseline)
+			if upload:
+				return upload
+			if await request.is_disconnected():
+				raise HTTPException(status_code=499, detail="The client stopped waiting for a photo")
+			await asyncio.sleep(0.25)
+	finally:
+		INBOX.end_wait()
 	raise HTTPException(status_code=408, detail="No photo arrived from the camera yet")
 
 

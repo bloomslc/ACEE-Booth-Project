@@ -258,8 +258,17 @@ add `AmbientCapabilities=CAP_NET_BIND_SERVICE` to `acee-backend.service`.
 How it works:
 
 - There is no live preview. The camera screen asks the operator to shoot with
-	the camera, shows a waiting message, and calls `POST /capture`, which waits
-	for the next photo the camera uploads.
+	the camera and calls `POST /capture`, which waits for the next photo the
+	camera uploads.
+- The waiting screen polls `GET /camera/status` every 2 seconds and shows
+	whether the booth is waiting (green), whether the camera has connected or had
+	its login rejected, and the last file received. Many cameras connect only
+	while sending, so "Camera last connected …" is normal while idle.
+- The API terminal logs each FTP connection, login (and rejected logins), and
+	upload, which is the quickest way to see why a photo did not arrive. If
+	nothing is logged when you shoot, the camera is not reaching the Pi (address,
+	port, or firewall); a login failure means the user or password differs; a
+	file that arrives but is ignored means the camera is not sending JPEG.
 - The uploaded JPEG is moved into `PHOTO_STORAGE_DIR` under a UUID name, then
 	watermarked, uploaded to the bucket, and recorded exactly like a `gphoto2`
 	capture. The camera's original is removed from the FTP folder.
@@ -383,6 +392,13 @@ All routes use the `/api/v1` prefix. Routes marked **token** require
 Returns application, email provider, database, `dev_bypass`, `camera_mode`
 (`gphoto2`, `ftp`, or `bypass`), and `image_storage` (`s3` or `local`) status.
 
+### `GET /camera/status` (token)
+
+Returns `mode`, `waiting` (a capture request is waiting for a camera photo),
+and, in FTP mode, an `ftp` object with the server's `port`, connected `clients`,
+seconds since the last login or rejected login, and the `last_upload` (file name,
+seconds ago, and whether it was used). `ftp` is `null` outside FTP mode.
+
 ### `GET /dev-bypass-image`
 
 Serves the configured bypass image. Returns `404` unless `DEV_BYPASS` is on.
@@ -397,7 +413,8 @@ Returns `404` in FTP mode, which has no live preview.
 ### `POST /capture` (token)
 
 Captures and locally saves a photo (in FTP mode it waits up to
-`FTP_CAPTURE_TIMEOUT` seconds for the camera to upload one, then returns `408`),
+`FTP_CAPTURE_TIMEOUT` seconds for the camera to upload one, then returns `408`;
+a newer waiting request replaces an older one, which returns `409`),
 uploads it to the bucket when configured
 (`502` on failure), records it in Neon when enabled (`503` on failure), then
 returns:

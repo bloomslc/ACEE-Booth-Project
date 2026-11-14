@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +48,27 @@ class UploadInbox:
 		self._lock = threading.Lock()
 		self._pending: deque[Upload] = deque(maxlen=MAX_PENDING_UPLOADS)
 		self._sequence = 0
+		self._waiters = 0
+		self._generation = 0
+
+	def begin_wait(self) -> int:
+		"""Register a capture request that is waiting; the newest waiter supersedes older ones."""
+		with self._lock:
+			self._waiters += 1
+			self._generation += 1
+			return self._generation
+
+	def end_wait(self) -> None:
+		with self._lock:
+			self._waiters = max(0, self._waiters - 1)
+
+	def is_latest_waiter(self, generation: int) -> bool:
+		with self._lock:
+			return generation == self._generation
+
+	def waiting(self) -> bool:
+		with self._lock:
+			return self._waiters > 0
 
 	def add(self, path: Path) -> Upload:
 		with self._lock:
@@ -80,6 +102,41 @@ class FtpReceiver:
 		self._server: ThreadedFTPServer | None = None
 		self._thread: threading.Thread | None = None
 		self._stopping = False
+		self._state_lock = threading.Lock()
+		self._clients = 0
+		self._last_login: float | None = None
+		self._last_login_failure: float | None = None
+		self._last_upload: tuple[str, float, bool] | None = None
+
+	def status(self) -> dict[str, object]:
+		"""Snapshot of what the camera has done, with ages in seconds so clocks never need to match."""
+		now = time.monotonic()
+
+		def age(moment: float | None) -> int | None:
+			return None if moment is None else round(now - moment)
+
+		with self._state_lock:
+			last_upload = None
+			if self._last_upload:
+				name, moment, used = self._last_upload
+				last_upload = {"name": name, "seconds_ago": age(moment), "used": used}
+			return {
+				"running": self._server is not None,
+				"port": self.port,
+				"clients": self._clients,
+				"last_login_seconds_ago": age(self._last_login),
+				"last_login_failed_seconds_ago": age(self._last_login_failure),
+				"last_upload": last_upload,
+			}
+
+	def _record(self, **changes: object) -> None:
+		with self._state_lock:
+			for name, value in changes.items():
+				setattr(self, name, value)
+
+	def _adjust_clients(self, delta: int) -> None:
+		with self._state_lock:
+			self._clients = max(0, self._clients + delta)
 
 	@property
 	def port(self) -> int | None:
@@ -106,11 +163,33 @@ class FtpReceiver:
 		authorizer.add_user(user, password, str(root), perm="elwmf")
 
 		inbox = self._inbox
+		receiver = self
 
 		class CameraHandler(FTPHandler):
+			def on_connect(self) -> None:
+				receiver._adjust_clients(1)
+				logger.info("Camera connected from %s", self.remote_ip)
+
+			def on_disconnect(self) -> None:
+				receiver._adjust_clients(-1)
+
+			def on_login(self, username: str) -> None:
+				receiver._record(_last_login=time.monotonic())
+				logger.info("Camera logged in user=%s", username)
+
+			def on_login_failed(self, username: str, password: str) -> None:
+				receiver._record(_last_login_failure=time.monotonic())
+				logger.warning("Camera login failed user=%s", username)
+
+			def on_incomplete_file_received(self, file: str) -> None:
+				logger.warning("Camera upload was interrupted name=%s", Path(file).name)
+				Path(file).unlink(missing_ok=True)
+
 			def on_file_received(self, file: str) -> None:
 				path = Path(file)
-				if path.suffix.lower() not in JPEG_SUFFIXES:
+				is_jpeg = path.suffix.lower() in JPEG_SUFFIXES
+				receiver._record(_last_upload=(path.name, time.monotonic(), is_jpeg))
+				if not is_jpeg:
 					logger.info("Ignoring non-JPEG FTP upload name=%s", path.name)
 					return
 				upload = inbox.add(path)
